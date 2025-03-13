@@ -1,0 +1,157 @@
+.App {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+h1 {
+  color: #333;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+/* Button styles */
+.button, button {
+  background-color: #646cff;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.3s;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.button:hover, button:hover {
+  background-color: #535bf2;
+}
+
+.button:disabled, button:disabled {
+  background-color: #93a4ff;
+  cursor: not-allowed;
+}
+
+/* Form styles */
+.permit-form {
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #eee;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #333;
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.error {
+  color: #d32f2f;
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #ffeeee;
+  border-radius: 4px;
+  border: 1px solid #ffcccc;
+}
+
+/* Token metadata styles */
+.token-info {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  color: #096dd9;
+}
+
+.token-decimals {
+  color: #666;
+  font-weight: normal;
+  margin-left: 5px;
+}
+
+.info-message {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #666;
+}
+
+.button-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.wallet-info {
+  padding: 15px;
+  background-color: #f5f7ff;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #e0e4ff;
+}
+
+.connect-wallet {
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #eee;
+}
+
+.error-message {
+  color: #d32f2f;
+  margin-top: 10px;
+}
+
+.signature-display {
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #eee;
+}
+
+.signature-box {
+  background-color: #f0f0f0;
+  padding: 15px;
+  border-radius: 4px;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+footer {
+  margin-top: 40px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+} 
