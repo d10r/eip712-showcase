@@ -11,6 +11,7 @@ function App() {
     <div className="App">
       <header>
         <h1>EIP-712 Demo: ERC20 Permit</h1>
+        <p className="subtitle">Experience the future of token approvals</p>
       </header>
       
       <main>

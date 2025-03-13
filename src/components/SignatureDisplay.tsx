@@ -11,8 +11,11 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({ signature }) => {
     <div className="signature-display">
       <h2>Signature Result</h2>
       <div className="signature-box">
-        <p>Signature:</p>
+        <div className="signature-label">EIP-712 Signature:</div>
         <code>{signature}</code>
+      </div>
+      <div className="signature-info">
+        <p>This signature can be submitted on-chain along with the permit parameters to approve token spending without requiring a separate transaction.</p>
       </div>
     </div>
   )

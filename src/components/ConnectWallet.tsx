@@ -9,7 +9,10 @@ const ConnectWallet: React.FC = () => {
   if (isConnected && address) {
     return (
       <div className="wallet-info">
-        <p>Connected: {address.substring(0, 6)}...{address.substring(address.length - 4)}</p>
+        <div>
+          <span className="connection-indicator"></span>
+          <p>Connected: <span className="address">{address.substring(0, 6)}...{address.substring(address.length - 4)}</span></p>
+        </div>
         <button 
           onClick={() => disconnect()}
           className="button"
@@ -23,6 +26,7 @@ const ConnectWallet: React.FC = () => {
   return (
     <div className="connect-wallet">
       <h2>Connect Wallet</h2>
+      <p className="connect-description">Connect your wallet to sign ERC20 permit messages</p>
       <div className="button-container">
         {connectors.map((connector) => (
           <button

@@ -1,17 +1,55 @@
+/* Superfluid-inspired theme */
+:root {
+  --sf-green: #7cfc00;
+  --sf-dark: #111111;
+  --sf-gray: #333333;
+  --sf-light-gray: #444444;
+  --sf-text: #ffffff;
+  --sf-error: #ff4d4f;
+}
+
+body {
+  background-color: var(--sf-dark);
+  color: var(--sf-text);
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+
 .App {
-  max-width: 1200px;
+  max-width: 800px;
+  width: 100%;
   margin: 0 auto;
-  padding: 20px;
-  font-family: Arial, sans-serif;
+  padding: 40px 20px;
 }
 
 header {
-  margin-bottom: 30px;
+  margin-bottom: 40px;
   text-align: center;
 }
 
 h1 {
-  color: #333;
+  color: var(--sf-green);
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  color: #aaaaaa;
+  font-size: 18px;
+  margin-top: 5px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+h2 {
+  color: var(--sf-green);
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 20px;
 }
 
 main {
@@ -23,84 +61,120 @@ main {
 
 /* Button styles */
 .button, button {
-  background-color: #646cff;
-  color: white;
+  background-color: var(--sf-green);
+  color: var(--sf-dark);
   border: none;
-  padding: 10px 16px;
-  border-radius: 4px;
+  padding: 12px 20px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.3s;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.2s ease;
   margin-right: 10px;
   margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
 }
 
 .button:hover, button:hover {
-  background-color: #535bf2;
+  background-color: #90ff20;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .button:disabled, button:disabled {
-  background-color: #93a4ff;
+  background-color: #3a5a1a;
+  color: #888888;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Form styles */
 .permit-form {
-  padding: 20px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
+  padding: 24px;
+  background-color: var(--sf-gray);
+  border-radius: 12px;
   margin-bottom: 20px;
-  border: 1px solid #eee;
+  border: 1px solid var(--sf-light-gray);
+}
+
+.permit-form form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .form-group {
-  margin-bottom: 15px;
+  margin-bottom: 20px;
+  width: 100%;
+  max-width: 500px;
 }
 
 label {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   font-weight: 500;
-  color: #333;
+  color: var(--sf-green);
 }
 
 input {
   width: 100%;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 12px;
+  background-color: var(--sf-light-gray);
+  border: 1px solid #555555;
+  border-radius: 8px;
   font-size: 16px;
+  color: white;
+  transition: border-color 0.3s;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--sf-green);
+  box-shadow: 0 0 0 1px var(--sf-green);
+}
+
+input::placeholder {
+  color: #888888;
 }
 
 .error {
-  color: #d32f2f;
+  color: var(--sf-error);
   margin-top: 15px;
-  padding: 10px;
-  background-color: #ffeeee;
-  border-radius: 4px;
-  border: 1px solid #ffcccc;
+  padding: 12px;
+  background-color: rgba(255, 77, 79, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 77, 79, 0.3);
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 /* Token metadata styles */
 .token-info {
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  background-color: #e6f7ff;
-  border: 1px solid #91d5ff;
-  color: #096dd9;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: rgba(124, 252, 0, 0.1);
+  border: 1px solid rgba(124, 252, 0, 0.3);
+  color: var(--sf-green);
+  width: 100%;
 }
 
 .token-decimals {
-  color: #666;
+  color: #aaaaaa;
   font-weight: normal;
   margin-left: 5px;
 }
 
 .info-message {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 14px;
-  color: #666;
+  color: #aaaaaa;
+  width: 100%;
 }
 
 .button-container {
@@ -108,50 +182,105 @@ input {
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 20px;
+  justify-content: center;
 }
 
 .wallet-info {
-  padding: 15px;
-  background-color: #f5f7ff;
-  border-radius: 6px;
+  padding: 20px;
+  background-color: var(--sf-gray);
+  border-radius: 12px;
   margin-bottom: 20px;
-  border: 1px solid #e0e4ff;
+  border: 1px solid var(--sf-light-gray);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.wallet-info .connection-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background-color: var(--sf-green);
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.wallet-info .address {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--sf-green);
 }
 
 .connect-wallet {
-  padding: 20px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
+  padding: 24px;
+  background-color: var(--sf-gray);
+  border-radius: 12px;
   margin-bottom: 20px;
-  border: 1px solid #eee;
+  border: 1px solid var(--sf-light-gray);
+  text-align: center;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.connect-description {
+  color: #aaaaaa;
+  margin-bottom: 20px;
 }
 
 .error-message {
-  color: #d32f2f;
+  color: var(--sf-error);
   margin-top: 10px;
+  text-align: center;
 }
 
 .signature-display {
-  padding: 20px;
-  background-color: #f9f9f9;
-  border-radius: 6px;
+  padding: 24px;
+  background-color: var(--sf-gray);
+  border-radius: 12px;
   margin-bottom: 20px;
-  border: 1px solid #eee;
+  border: 1px solid var(--sf-light-gray);
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
 }
 
 .signature-box {
-  background-color: #f0f0f0;
+  background-color: var(--sf-light-gray);
   padding: 15px;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow-wrap: break-word;
   word-break: break-all;
+  color: #cccccc;
+  font-family: monospace;
+  font-size: 14px;
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.signature-label {
+  color: var(--sf-green);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.signature-info {
+  font-size: 14px;
+  color: #aaaaaa;
+  line-height: 1.5;
+  padding-top: 5px;
 }
 
 footer {
   margin-top: 40px;
   text-align: center;
   font-size: 14px;
-  color: #666;
-  border-top: 1px solid #eee;
+  color: #888888;
+  border-top: 1px solid var(--sf-light-gray);
   padding-top: 20px;
 } 
