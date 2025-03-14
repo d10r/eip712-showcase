@@ -25,15 +25,20 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
     const newAddress = e.target.value
     setTokenAddress(newAddress)
     setTokenMetadata(null)
+    setError('')
     
     // Only attempt to fetch metadata if the address is a valid Ethereum address
     if (ethers.utils.isAddress(newAddress)) {
       setIsLookingUpToken(true)
-      setError('')
       
       try {
         const metadata = await fetchTokenMetadata(newAddress)
         setTokenMetadata(metadata)
+        
+        // Display a warning if permit is not supported
+        if (metadata.supportsPermit === false) {
+          setError(`This token (${metadata.symbol}) doesn't support the permit functionality (EIP-2612).`)
+        }
       } catch (err) {
         console.error('Error fetching token metadata:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch token details')
@@ -68,6 +73,16 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
       if (!tokenMetadata) {
         throw new Error('Token metadata not available. Please ensure this is a valid ERC20 token.')
       }
+      if (tokenMetadata.supportsPermit === false) {
+        throw new Error(`This token (${tokenMetadata.symbol}) doesn't support the permit functionality (EIP-2612).`)
+      }
+
+      // Debug logging
+      console.log('tokenAddress', tokenAddress)
+      console.log('address', address)
+      console.log('recipient', recipient)
+      console.log('amount', amount)
+      console.log('chainId', chainId)
 
       // Create permit data with the proper amount formatting
       const { typedData, deadline, adjustedAmount } = await createPermitData(
@@ -77,6 +92,9 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
         amount,
         chainId
       )
+
+      // Debug logging
+      console.log('typedData', typedData)
 
       // Request signature
       const signature = await signTypedData({
@@ -111,11 +129,18 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
           />
           {isLookingUpToken && <div className="info-message">Looking up token...</div>}
           {tokenMetadata && (
-            <div className="token-info">
+            <div className={`token-info ${!tokenMetadata.supportsPermit ? 'token-no-permit' : ''}`}>
               <p>
                 <strong>{tokenMetadata.name} ({tokenMetadata.symbol})</strong>
                 <span className="token-decimals"> - {tokenMetadata.decimals} decimals</span>
               </p>
+              {tokenMetadata.supportsPermit !== undefined && (
+                <div className="permit-support">
+                  {tokenMetadata.supportsPermit 
+                    ? <span className="permit-supported">Permit supported ✓</span> 
+                    : <span className="permit-unsupported">Permit not supported ✗</span>}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -129,7 +154,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
             onChange={(e) => setAmount(e.target.value)}
             placeholder="1.0"
             required
-            disabled={!tokenMetadata}
+            disabled={!tokenMetadata || tokenMetadata.supportsPermit === false}
           />
           {tokenMetadata && amount && !isNaN(parseFloat(amount)) && (
             <div className="info-message">
@@ -150,12 +175,13 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
             onChange={(e) => setRecipient(e.target.value)}
             placeholder="0x..."
             required
+            disabled={!tokenMetadata || tokenMetadata.supportsPermit === false}
           />
         </div>
 
         <button 
           type="submit" 
-          disabled={isLoading || !address || !tokenMetadata}
+          disabled={isLoading || !address || !tokenMetadata || tokenMetadata.supportsPermit === false}
           className="button"
         >
           {isLoading ? 'Signing...' : 'Sign Permit'}

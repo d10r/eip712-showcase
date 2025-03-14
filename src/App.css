@@ -164,6 +164,26 @@ input::placeholder {
   width: 100%;
 }
 
+.token-info.token-no-permit {
+  background-color: rgba(255, 77, 79, 0.1);
+  border: 1px solid rgba(255, 77, 79, 0.3);
+}
+
+.permit-support {
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+.permit-supported {
+  color: var(--sf-green);
+  font-weight: 500;
+}
+
+.permit-unsupported {
+  color: var(--sf-error);
+  font-weight: 500;
+}
+
 .token-decimals {
   color: #aaaaaa;
   font-weight: normal;
@@ -200,6 +220,61 @@ input::placeholder {
   margin-right: auto;
 }
 
+.connection-status p {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.connection-status .chain-info {
+  margin-top: 5px;
+  font-size: 14px;
+  color: #aaaaaa;
+  display: flex;
+  align-items: center;
+}
+
+.connection-status .network-message {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #888888;
+  font-style: italic;
+}
+
+.network-selector {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.network-selector label {
+  color: #aaaaaa;
+  font-size: 14px;
+  margin-bottom: 0;
+}
+
+.network-selector select {
+  background-color: var(--sf-light-gray);
+  color: var(--sf-text);
+  border: 1px solid #555555;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: monospace;
+}
+
+.network-selector select:focus {
+  border-color: var(--sf-green);
+  outline: none;
+}
+
+.network-selector select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .wallet-info .connection-indicator {
   display: inline-block;
   width: 10px;
@@ -213,6 +288,17 @@ input::placeholder {
   font-family: monospace;
   font-weight: 600;
   color: var(--sf-green);
+  margin-left: 5px;
+}
+
+.wallet-info .chain-name {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--sf-green);
+}
+
+.wallet-info .chain-name.unsupported {
+  color: var(--sf-error);
 }
 
 .connect-wallet {

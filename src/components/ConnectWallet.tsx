@@ -1,23 +1,51 @@
 import React from 'react'
-import { useAccount, useConnect, useDisconnect } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useChainId } from 'wagmi'
+import { chains } from '../wagmi'
 
 const ConnectWallet: React.FC = () => {
   const { address, isConnected } = useAccount()
   const { connect, connectors, error } = useConnect()
   const { disconnect } = useDisconnect()
+  const chainId = useChainId()
+  
+  // Get chain info from our configured chains
+  const getChainInfo = () => {
+    if (!chainId) return null
+    
+    const currentChain = chains.find(chain => chain.id === chainId)
+    
+    if (!currentChain) {
+      return (
+        <span className="chain-name unsupported">
+          Unsupported Network
+        </span>
+      )
+    }
+    
+    return (
+      <span className="chain-name">
+        {currentChain.name}
+      </span>
+    )
+  }
 
   if (isConnected && address) {
     return (
       <div className="wallet-info">
-        <div>
-          <span className="connection-indicator"></span>
-          <p>Connected: <span className="address">{address.substring(0, 6)}...{address.substring(address.length - 4)}</span></p>
+        <div className="connection-status">
+          <p>
+            <span className="connection-indicator"></span>
+            Connected: <span className="address">{address.substring(0, 6)}...{address.substring(address.length - 4)}</span>
+          </p>
+          <p className="chain-info">
+            {getChainInfo()}
+          </p>
         </div>
         <button 
           onClick={() => disconnect()}
           className="button"
         >
-          Disconnect
+          DISCONNECT
         </button>
       </div>
     )

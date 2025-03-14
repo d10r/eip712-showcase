@@ -18,3 +18,6 @@ The resulting signature is then printed on the page.
 Less code is better. Always try to achieve the goal with the least amount of code possible.
 Always question what's already there. Don't assume that pre-existing code is worth keeping, that previously made architectural decisions are correct. If you think they are not, change/delete/rewrite. If the change you have in mind seems drastic, you may ask for confirmation before doing it.
 When made aware of an issue and not very confident that the proposed fix will be the solution, immediately add enough debug output to make sure the problem is sufficiently understood to be well solved in at most 2 iterations.
+
+The UI shall be simple, with basic UX rules respected.
+Design wise it should be reminiscent of Superfluid branding (green).
