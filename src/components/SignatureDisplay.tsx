@@ -12,14 +12,12 @@ interface SignatureDisplayProps {
   signature: string | null
   permitParams?: PermitParameters
   tokenMetadata?: TokenMetadata
-  onExecutionComplete?: () => void
 }
 
 const SignatureDisplay: React.FC<SignatureDisplayProps> = ({ 
   signature, 
   permitParams, 
-  tokenMetadata,
-  onExecutionComplete
+  tokenMetadata
 }) => {
   const { address } = useAccount()
   const [isLoading, setIsLoading] = useState(false)
@@ -68,7 +66,9 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       
       // Wait for transaction to be mined
       await tx.wait()
-      if (onExecutionComplete) onExecutionComplete()
+      
+      // Don't reset UI or call completion handler - just keep the transaction info visible
+      // This way the transaction success message stays on screen
     } catch (err) {
       console.error('Transaction error:', err)
       setError(err instanceof Error ? err.message : 'Transaction failed')

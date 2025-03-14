@@ -20,13 +20,6 @@ function App() {
     setTokenMetadata(metadata)
   }
 
-  const handleExecutionComplete = () => {
-    // Reset the state after execution is completed
-    setSignature(null)
-    setPermitParams(null)
-    setTokenMetadata(null)
-  }
-
   return (
     <div className="App">
       <header>
@@ -44,7 +37,6 @@ function App() {
             signature={signature}
             permitParams={permitParams || undefined}
             tokenMetadata={tokenMetadata || undefined}
-            onExecutionComplete={handleExecutionComplete}
           />
         )}
       </main>
