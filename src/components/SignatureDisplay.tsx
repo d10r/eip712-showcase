@@ -3,6 +3,7 @@ import { useAccount, useChainId } from 'wagmi'
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { config } from '../wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
+import sfMetadata from '@superfluid-finance/metadata'
 
 // ERC20 ABI for permit execution
 const ERC20_ABI = [
@@ -108,20 +109,21 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   }
 
   const getExplorerLink = () => {
-    if (!txHash || !permitParams) return '#'
-    
-    const explorerBaseUrls: Record<number, string> = {
-      1: 'https://etherscan.io/tx/',
-      5: 'https://goerli.etherscan.io/tx/',
-      11155111: 'https://sepolia.etherscan.io/tx/',
-      137: 'https://polygonscan.com/tx/',
-      43113: 'https://testnet.snowtrace.io/tx/',
-      80001: 'https://mumbai.polygonscan.com/tx/'
+    if (!txHash || !permitParams) return '#';
+    const network = sfMetadata.networks.find((net: any) => net.chainId === permitParams.chainId);
+    if (!network || !network.explorer) {
+      console.error('Explorer not found for chain', permitParams.chainId);
+      return '#';
     }
-    
-    const baseUrl = explorerBaseUrls[permitParams.chainId] || 'https://etherscan.io/tx/'
-    return `${baseUrl}${txHash}`
-  }
+    let baseUrl = network.explorer;
+    if (!baseUrl.endsWith('/')) {
+      baseUrl += '/';
+    }
+    if (!baseUrl.includes('tx')) {
+      baseUrl += 'tx/';
+    }
+    return `${baseUrl}${txHash}`;
+  };
 
   const canExecute = !!permitParams && !!tokenMetadata;
 
