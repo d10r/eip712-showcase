@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { ethers } from 'ethers'
-import { useAccount } from 'wagmi'
+import { useAccount, useChainId } from 'wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
 
 // ERC20 interface for permit execution
 const ERC20_INTERFACE = [
   'function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external'
-]
+];
 
 interface SignatureDisplayProps {
   signature: string | null
@@ -20,6 +20,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   tokenMetadata
 }) => {
   const { address } = useAccount()
+  const chainId = useChainId()
   const [isLoading, setIsLoading] = useState(false)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -43,15 +44,33 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       setError(null)
       setTxHash(null)
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum)
+      // Check if we have window.ethereum available
+      if (!window.ethereum) {
+        setError('No wallet provider detected. If using WalletConnect, this function is not supported yet.')
+        return
+      }
+
+      // Get a provider and signer
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any)
       const signer = provider.getSigner()
+      
+      // Create contract instance
       const tokenContract = new ethers.Contract(
         permitParams.tokenAddress,
         ERC20_INTERFACE,
         signer
       )
 
+      // Get the signature components
       const { v, r, s } = splitSignature()
+
+      console.log('Executing permit with params:', {
+        owner: permitParams.owner,
+        spender: permitParams.spender,
+        value: permitParams.value,
+        deadline: permitParams.deadline,
+        v, r, s
+      })
 
       // Execute the permit transaction
       const tx = await tokenContract.permit(
@@ -66,9 +85,8 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       
       // Wait for transaction to be mined
       await tx.wait()
+      console.log('Transaction confirmed:', tx.hash)
       
-      // Don't reset UI or call completion handler - just keep the transaction info visible
-      // This way the transaction success message stays on screen
     } catch (err) {
       console.error('Transaction error:', err)
       setError(err instanceof Error ? err.message : 'Transaction failed')

@@ -1,11 +1,45 @@
-import { useAccount, useConnect, useDisconnect, useChainId } from 'wagmi'
+import { useAccount, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
+import { useWeb3Modal } from '@web3modal/wagmi/react'
 import { chains } from '../wagmi'
+import { useState, useEffect } from 'react'
+import { setCurrentChainId } from '../utils/permit'
 
 const ConnectWallet: React.FC = () => {
-  const { address, isConnected } = useAccount()
-  const { connect, connectors, error } = useConnect()
+  const { address, isConnected, connector } = useAccount()
+  const { open } = useWeb3Modal()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
+  const { switchChain, error: switchError } = useSwitchChain()
+  const [switchingNetwork, setSwitchingNetwork] = useState(false)
+  
+  // Debug log when connector or chainId changes
+  useEffect(() => {
+    if (connector) {
+      console.log('🔌 [DEBUG] Connector info:', {
+        id: connector.id,
+        name: connector.name,
+        type: connector.type,
+        isWalletConnect: connector.id === 'walletConnect' || connector.name === 'WalletConnect',
+        details: connector
+      });
+    }
+  }, [connector]);
+  
+  useEffect(() => {
+    if (chainId) {
+      console.log('⛓️ [DEBUG] Chain ID changed:', chainId);
+      const currentChain = chains.find(chain => chain.id === chainId);
+      console.log('⛓️ [DEBUG] Current chain:', currentChain);
+    }
+  }, [chainId]);
+  
+  // Update the permit.ts chain ID whenever the Wagmi chain changes
+  useEffect(() => {
+    if (chainId) {
+      setCurrentChainId(chainId);
+      console.log('🔄 [DEBUG] Updated permit.ts with new chain ID:', chainId);
+    }
+  }, [chainId]);
   
   // Get chain info from our configured chains
   const getChainInfo = () => {
@@ -28,6 +62,39 @@ const ConnectWallet: React.FC = () => {
     )
   }
 
+  const handleNetworkSwitch = async (newChainId: number) => {
+    try {
+      setSwitchingNetwork(true)
+      console.log('🔄 [DEBUG] Starting network switch from', chainId, 'to', newChainId);
+      
+      // Check if we're using WalletConnect
+      const isWalletConnect = connector?.id === 'walletConnect' || connector?.name === 'WalletConnect';
+      console.log('🔄 [DEBUG] Using WalletConnect:', isWalletConnect);
+      
+      await switchChain({ chainId: newChainId })
+      
+      console.log('✅ [DEBUG] Network switch successful from Wagmi perspective');
+      
+      // Add a delay and check the chain ID directly from window.ethereum to verify
+      setTimeout(() => {
+        if (window.ethereum) {
+          window.ethereum.request({ method: 'eth_chainId' })
+            .then((result: any) => {
+              const currentChainId = parseInt(result, 16);
+              console.log('🔍 [DEBUG] After switch - window.ethereum chainId:', currentChainId);
+              console.log('🔍 [DEBUG] Expected chainId:', newChainId);
+              console.log('🔍 [DEBUG] Match?', currentChainId === newChainId);
+            })
+            .catch((error: any) => console.error('Error getting chainId after switch:', error));
+        }
+      }, 2000);
+    } catch (error) {
+      console.error("❌ [DEBUG] Error switching network:", error)
+    } finally {
+      setSwitchingNetwork(false)
+    }
+  }
+
   if (isConnected && address) {
     return (
       <div className="wallet-info">
@@ -39,6 +106,29 @@ const ConnectWallet: React.FC = () => {
           <p className="chain-info">
             {getChainInfo()}
           </p>
+          
+          <div className="network-selector">
+            <label>Network:</label>
+            <select 
+              value={chainId} 
+              onChange={(e) => handleNetworkSwitch(Number(e.target.value))}
+              disabled={switchingNetwork}
+            >
+              {chains.map((chain) => (
+                <option key={chain.id} value={chain.id}>
+                  {chain.name}
+                </option>
+              ))}
+            </select>
+            {switchingNetwork && <span className="loading-indicator">Switching...</span>}
+          </div>
+          
+          {switchError && (
+            <div className="network-message">
+              <p>Network switching error. If you're using Trust Wallet or another mobile wallet, you may need to change networks directly in your wallet app.</p>
+              <p>Error: {switchError.message}</p>
+            </div>
+          )}
         </div>
         <button 
           onClick={() => disconnect()}
@@ -54,18 +144,12 @@ const ConnectWallet: React.FC = () => {
     <div className="connect-wallet">
       <h2>Connect Wallet</h2>
       <p className="connect-description">Connect your wallet to sign ERC20 permit messages</p>
-      <div className="button-container">
-        {connectors.map((connector) => (
-          <button
-            key={connector.id}
-            onClick={() => connect({ connector })}
-            className="button"
-          >
-            Connect {connector.name}
-          </button>
-        ))}
-      </div>
-      {error && <p className="error-message">Error: {error.message}</p>}
+      <button 
+        onClick={() => open()}
+        className="button"
+      >
+        CONNECT WALLET
+      </button>
     </div>
   )
 }

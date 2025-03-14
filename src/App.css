@@ -412,4 +412,33 @@ footer {
   color: #888888;
   border-top: 1px solid var(--sf-light-gray);
   padding-top: 20px;
+}
+
+.network-message {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #aaaaaa;
+  font-style: italic;
+  background-color: rgba(124, 252, 0, 0.05);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 252, 0, 0.1);
+}
+
+.network-message p {
+  margin: 5px 0;
+}
+
+.loading-indicator {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 14px;
+  color: var(--sf-green);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 } 
