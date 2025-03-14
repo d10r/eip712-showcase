@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useAccount, useSignTypedData, useChainId } from 'wagmi'
-import { fetchTokenMetadata, createPermitData, TokenMetadata, SignedPermitExecutionContext, PermitParameters } from '../utils/permit'
+import { fetchTokenMetadata, createPermitData, TokenMetadata, PermitParameters } from '../utils/permit'
 import { ethers } from 'ethers'
 
 interface PermitFormProps {
@@ -8,7 +8,7 @@ interface PermitFormProps {
 }
 
 const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
-  const { address, isConnected } = useAccount()
+  const { address } = useAccount()
   const chainId = useChainId()
   const { signTypedDataAsync } = useSignTypedData()
   

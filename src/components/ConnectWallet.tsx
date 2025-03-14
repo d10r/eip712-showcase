@@ -1,4 +1,3 @@
-import React from 'react'
 import { useAccount, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { chains } from '../wagmi'
 

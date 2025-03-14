@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import ConnectWallet from './components/ConnectWallet'
 import PermitForm from './components/PermitForm'
 import SignatureDisplay from './components/SignatureDisplay'

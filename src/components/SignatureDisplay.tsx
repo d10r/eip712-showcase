@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { ethers } from 'ethers'
 import { useAccount } from 'wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
