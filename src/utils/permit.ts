@@ -7,7 +7,9 @@ const ERC20_INTERFACE = [
   'function decimals() view returns (uint8)',
   'function nonces(address owner) view returns (uint256)',
   // Add DOMAIN_SEPARATOR as a potential check for permit support
-  'function DOMAIN_SEPARATOR() view returns (bytes32)'
+  'function DOMAIN_SEPARATOR() view returns (bytes32)',
+  // Add permit function for potential execution
+  'function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external'
 ]
 
 // ERC20 Permit type data for EIP-712 signing
@@ -26,6 +28,26 @@ export interface TokenMetadata {
   decimals: number
   supportsPermit?: boolean
 }
+
+// Core permit parameters used for on-chain operations
+export interface PermitParameters {
+  owner: string
+  spender: string
+  value: string
+  deadline: number
+  tokenAddress: string
+  chainId: number
+}
+
+// Data for the permit execution UI component
+export interface SignedPermitExecutionContext {
+  permitParams: PermitParameters
+  tokenMetadata: TokenMetadata
+  signature?: string
+}
+
+// For backward compatibility
+export type PermitData = SignedPermitExecutionContext;
 
 // Check if a token supports the permit functionality
 export async function checkPermitSupport(tokenAddress: string): Promise<boolean> {
@@ -79,6 +101,14 @@ export async function fetchTokenMetadata(tokenAddress: string): Promise<TokenMet
   }
 }
 
+// Ensure address has 0x prefix
+function ensureHexAddress(address: string): `0x${string}` {
+  if (!address.startsWith('0x')) {
+    return `0x${address}` as `0x${string}`
+  }
+  return address as `0x${string}`
+}
+
 // Generate permit data for signing
 export async function createPermitData(
   tokenAddress: string,
@@ -103,8 +133,9 @@ export async function createPermitData(
     }
 
     // Get token details
-    const [name, decimals, nonce] = await Promise.all([
+    const [name, symbol, decimals, nonce] = await Promise.all([
       tokenContract.name(),
+      tokenContract.symbol(),
       tokenContract.decimals(),
       tokenContract.nonces(owner),
     ])
@@ -114,12 +145,15 @@ export async function createPermitData(
     
     const deadline = Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
 
+    // Ensure address has 0x prefix
+    const verifyingContractAddress = ensureHexAddress(tokenAddress)
+
     // Create the EIP-712 domain separator
     const domain = {
       name,
       version: '1',
       chainId,
-      verifyingContract: tokenAddress,
+      verifyingContract: verifyingContractAddress,
     }
 
     // Create the typed data structure
@@ -140,11 +174,34 @@ export async function createPermitData(
     const typedData = {
       domain,
       types,
-      primaryType: 'Permit',
+      primaryType: 'Permit' as const,
       message,
     }
 
-    return { typedData, deadline, adjustedAmount }
+    // Create parameter objects for execution
+    const permitParams: PermitParameters = {
+      owner,
+      spender,
+      value: adjustedAmount,
+      deadline,
+      tokenAddress,
+      chainId
+    }
+
+    const tokenMetadata: TokenMetadata = {
+      name,
+      symbol,
+      decimals,
+      supportsPermit: true
+    }
+
+    // Create full execution context
+    const executionContext: SignedPermitExecutionContext = {
+      permitParams,
+      tokenMetadata
+    }
+
+    return { typedData, permitParams, tokenMetadata, executionContext }
   } catch (error) {
     console.error('Error creating permit data:', error)
     if (error instanceof Error) {

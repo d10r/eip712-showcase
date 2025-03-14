@@ -324,6 +324,7 @@ input::placeholder {
   text-align: center;
 }
 
+/* Signature Display with Execution */
 .signature-display {
   padding: 24px;
   background-color: var(--sf-gray);
@@ -333,7 +334,6 @@ input::placeholder {
   max-width: 500px;
   margin-left: auto;
   margin-right: auto;
-  text-align: center;
 }
 
 .signature-box {
@@ -345,7 +345,7 @@ input::placeholder {
   color: #cccccc;
   font-family: monospace;
   font-size: 14px;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
   text-align: left;
 }
 
@@ -355,11 +355,54 @@ input::placeholder {
   font-weight: 500;
 }
 
+.signature-box code {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 100px;
+  overflow-y: auto;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  color: #cccccc;
+  font-family: monospace;
+  font-size: 12px;
+  text-align: left;
+}
+
 .signature-info {
   font-size: 14px;
   color: #aaaaaa;
   line-height: 1.5;
-  padding-top: 5px;
+  margin-top: 15px;
+}
+
+.transaction-button {
+  width: 100%;
+  margin-top: 5px;
+  margin-bottom: 15px;
+}
+
+.transaction-success {
+  margin-top: 15px;
+  padding: 15px;
+  background-color: rgba(124, 252, 0, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(124, 252, 0, 0.3);
+  color: var(--sf-green);
+  text-align: center;
+}
+
+.tx-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--sf-green);
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.tx-link:hover {
+  color: #90ff20;
 }
 
 footer {

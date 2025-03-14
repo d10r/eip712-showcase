@@ -1,16 +1,16 @@
 import React, { useState } from 'react'
 import { useAccount, useSignTypedData, useChainId } from 'wagmi'
-import { fetchTokenMetadata, createPermitData, TokenMetadata } from '../utils/permit'
+import { fetchTokenMetadata, createPermitData, TokenMetadata, SignedPermitExecutionContext, PermitParameters } from '../utils/permit'
 import { ethers } from 'ethers'
 
 interface PermitFormProps {
-  onSignatureGenerated: (signature: string) => void
+  onSignatureGenerated: (signature: string, permitParams: PermitParameters, tokenMetadata: TokenMetadata) => void
 }
 
 const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
-  const { signTypedData } = useSignTypedData()
+  const { signTypedDataAsync } = useSignTypedData()
   
   const [tokenAddress, setTokenAddress] = useState('')
   const [amount, setAmount] = useState('')
@@ -85,7 +85,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
       console.log('chainId', chainId)
 
       // Create permit data with the proper amount formatting
-      const { typedData, deadline, adjustedAmount } = await createPermitData(
+      const { typedData, permitParams } = await createPermitData(
         tokenAddress,
         address,
         recipient,
@@ -96,15 +96,23 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
       // Debug logging
       console.log('typedData', typedData)
 
-      // Request signature
-      const signature = await signTypedData({
-        domain: typedData.domain,
-        types: typedData.types,
-        primaryType: typedData.primaryType,
-        message: typedData.message,
-      })
-
-      onSignatureGenerated(signature)
+      try {
+        // Use signTypedDataAsync instead of signTypedData
+        const signature = await signTypedDataAsync({
+          domain: typedData.domain as any,
+          types: typedData.types,
+          primaryType: 'Permit',
+          message: typedData.message,
+        })
+        
+        console.log('Signature received:', signature)
+        
+        // Pass the signature to the parent component
+        onSignatureGenerated(signature, permitParams, tokenMetadata)
+      } catch (signatureError) {
+        console.error('Signature error:', signatureError)
+        throw new Error('Failed to get a valid signature. The request may have been rejected.')
+      }
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'An unknown error occurred')

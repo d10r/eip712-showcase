@@ -2,10 +2,30 @@ import React, { useState } from 'react'
 import ConnectWallet from './components/ConnectWallet'
 import PermitForm from './components/PermitForm'
 import SignatureDisplay from './components/SignatureDisplay'
+import { PermitParameters, TokenMetadata } from './utils/permit'
 import './App.css'
 
 function App() {
   const [signature, setSignature] = useState<string | null>(null)
+  const [permitParams, setPermitParams] = useState<PermitParameters | null>(null)
+  const [tokenMetadata, setTokenMetadata] = useState<TokenMetadata | null>(null)
+
+  const handleSignatureGenerated = (
+    sig: string, 
+    params: PermitParameters, 
+    metadata: TokenMetadata
+  ) => {
+    setSignature(sig)
+    setPermitParams(params)
+    setTokenMetadata(metadata)
+  }
+
+  const handleExecutionComplete = () => {
+    // Reset the state after execution is completed
+    setSignature(null)
+    setPermitParams(null)
+    setTokenMetadata(null)
+  }
 
   return (
     <div className="App">
@@ -17,9 +37,16 @@ function App() {
       <main>
         <ConnectWallet />
         
-        <PermitForm onSignatureGenerated={setSignature} />
+        <PermitForm onSignatureGenerated={handleSignatureGenerated} />
         
-        <SignatureDisplay signature={signature} />
+        {signature && (
+          <SignatureDisplay 
+            signature={signature}
+            permitParams={permitParams || undefined}
+            tokenMetadata={tokenMetadata || undefined}
+            onExecutionComplete={handleExecutionComplete}
+          />
+        )}
       </main>
       
       <footer>
