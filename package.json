@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/d10r/eip712-showcase"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
