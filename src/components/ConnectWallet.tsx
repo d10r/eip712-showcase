@@ -2,7 +2,6 @@ import { useAccount, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
 import { useWeb3Modal } from '@web3modal/wagmi/react'
 import { chains } from '../wagmi'
 import { useState, useEffect } from 'react'
-import { setCurrentChainId } from '../utils/permit'
 
 const ConnectWallet: React.FC = () => {
   const { address, isConnected, connector } = useAccount()
@@ -30,14 +29,6 @@ const ConnectWallet: React.FC = () => {
       console.log('⛓️ [DEBUG] Chain ID changed:', chainId);
       const currentChain = chains.find(chain => chain.id === chainId);
       console.log('⛓️ [DEBUG] Current chain:', currentChain);
-    }
-  }, [chainId]);
-  
-  // Update the permit.ts chain ID whenever the Wagmi chain changes
-  useEffect(() => {
-    if (chainId) {
-      setCurrentChainId(chainId);
-      console.log('🔄 [DEBUG] Updated permit.ts with new chain ID:', chainId);
     }
   }, [chainId]);
   

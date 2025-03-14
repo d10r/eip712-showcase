@@ -1,35 +1,33 @@
-import { ethers } from 'ethers'
-import { chains } from '../wagmi'
+import { readContract } from 'wagmi/actions'
+import { Address, parseUnits } from 'viem'
+import { config } from '../wagmi'
 
-// Track the current chain ID for RPC connections
-let currentChainId: number | null = null;
+// ERC20 ABI for metadata and permit functionality
+const ERC20_ABI = [
+  { type: 'function', name: 'name', inputs: [], outputs: [{ type: 'string' }], stateMutability: 'view' },
+  { type: 'function', name: 'symbol', inputs: [], outputs: [{ type: 'string' }], stateMutability: 'view' },
+  { type: 'function', name: 'decimals', inputs: [], outputs: [{ type: 'uint8' }], stateMutability: 'view' },
+  { type: 'function', name: 'nonces', inputs: [{ type: 'address', name: 'owner' }], outputs: [{ type: 'uint256' }], stateMutability: 'view' },
+  { type: 'function', name: 'DOMAIN_SEPARATOR', inputs: [], outputs: [{ type: 'bytes32' }], stateMutability: 'view' },
+  { type: 'function', name: 'permit', inputs: [
+    { type: 'address', name: 'owner' },
+    { type: 'address', name: 'spender' },
+    { type: 'uint256', name: 'value' },
+    { type: 'uint256', name: 'deadline' },
+    { type: 'uint8', name: 'v' },
+    { type: 'bytes32', name: 'r' },
+    { type: 'bytes32', name: 's' }
+  ], outputs: [], stateMutability: 'nonpayable' }
+] as const;
 
-// Function to update the current chain ID (to be called from components)
-export function setCurrentChainId(chainId: number) {
-  console.log('📊 [DEBUG] Setting current chain ID for RPC:', chainId);
-  currentChainId = chainId;
-}
-
-// ERC20 interface for metadata and permit functionality
-const ERC20_INTERFACE = [
-  'function name() view returns (string)',
-  'function symbol() view returns (string)',
-  'function decimals() view returns (uint8)',
-  'function nonces(address owner) view returns (uint256)',
-  // Add DOMAIN_SEPARATOR as a potential check for permit support
-  'function DOMAIN_SEPARATOR() view returns (bytes32)',
-  // Add permit function for potential execution
-  'function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external'
-]
-
-// ERC20 Permit type data for EIP-712 signing
+// EIP-712 Permit type data
 export const ERC20PermitType = [
   { name: 'owner', type: 'address' },
   { name: 'spender', type: 'address' },
   { name: 'value', type: 'uint256' },
   { name: 'nonce', type: 'uint256' },
   { name: 'deadline', type: 'uint256' },
-]
+] as const;
 
 // Token metadata interface
 export interface TokenMetadata {
@@ -39,13 +37,13 @@ export interface TokenMetadata {
   supportsPermit?: boolean
 }
 
-// Core permit parameters used for on-chain operations
+// Core permit parameters used for operations
 export interface PermitParameters {
-  owner: string
-  spender: string
-  value: string
-  deadline: number
-  tokenAddress: string
+  owner: Address
+  spender: Address
+  value: bigint
+  deadline: bigint
+  tokenAddress: Address
   chainId: number
 }
 
@@ -59,66 +57,27 @@ export interface SignedPermitExecutionContext {
 // For backward compatibility
 export type PermitData = SignedPermitExecutionContext;
 
-// Get provider that works with both injected providers and WalletConnect
-function getProvider() {
+/**
+ * Checks if a token supports the permit functionality (EIP-2612)
+ */
+export async function checkPermitSupport(tokenAddress: Address): Promise<boolean> {
   try {
-    // If window.ethereum is available, use it
-    if (window.ethereum) {
-      console.log('🔍 [DEBUG] Using window.ethereum provider');
-      const provider = new ethers.providers.Web3Provider(window.ethereum as any);
-      
-      // Log chain ID for debugging
-      provider.getNetwork().then(network => {
-        console.log('🔍 [DEBUG] Web3Provider network:', network);
-      });
-      
-      return provider;
-    }
-    
-    // If we have a valid chain ID from components, use its RPC URL
-    if (currentChainId) {
-      const selectedChain = chains.find(chain => chain.id === currentChainId);
-      if (selectedChain && selectedChain.rpcUrls.default.http[0]) {
-        console.log(`🔄 [DEBUG] Using RPC for selected chain: ${selectedChain.name} (${currentChainId})`);
-        return new ethers.providers.JsonRpcProvider(selectedChain.rpcUrls.default.http[0]);
-      }
-    }
-    
-    // Fallback to the first chain in our chains array (should be mainnet)
-    console.log('🔍 [DEBUG] Falling back to default chain');
-    const defaultChain = chains[0];
-    
-    if (!defaultChain || !defaultChain.rpcUrls.default.http[0]) {
-      console.warn('No valid RPC URL found in chain configuration, using hardcoded fallback');
-      return new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
-    }
-    
-    console.log(`🔄 [DEBUG] Using RPC URL for default chain: ${defaultChain.name}`);
-    return new ethers.providers.JsonRpcProvider(defaultChain.rpcUrls.default.http[0]);
-  } catch (error) {
-    console.error("Error creating provider:", error);
-    throw new Error("Failed to connect to the network. Please check your wallet connection.");
-  }
-}
-
-// Check if a token supports the permit functionality
-export async function checkPermitSupport(tokenAddress: string): Promise<boolean> {
-  const provider = getProvider();
-  const tokenContract = new ethers.Contract(
-    tokenAddress,
-    ERC20_INTERFACE,
-    provider
-  );
-
-  try {
-    // Try to call a function that should only exist if permit is supported
-    // First check if nonces function works
-    await tokenContract.nonces(ethers.constants.AddressZero);
+    // Try to call nonces function first
+    await readContract(config, {
+      address: tokenAddress,
+      abi: ERC20_ABI,
+      functionName: 'nonces',
+      args: ['0x0000000000000000000000000000000000000000']
+    });
     return true;
   } catch (error) {
     try {
-      // If nonces fails, try to check for DOMAIN_SEPARATOR existence
-      await tokenContract.DOMAIN_SEPARATOR();
+      // If nonces fails, try to check for DOMAIN_SEPARATOR
+      await readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'DOMAIN_SEPARATOR',
+      });
       return true;
     } catch {
       // If both checks fail, token likely doesn't support permit
@@ -127,65 +86,55 @@ export async function checkPermitSupport(tokenAddress: string): Promise<boolean>
   }
 }
 
-// Fetch token metadata
-export async function fetchTokenMetadata(tokenAddress: string): Promise<TokenMetadata> {
-  console.log('📨 [DEBUG] fetchTokenMetadata called for address:', tokenAddress);
-  const provider = getProvider();
-  const tokenContract = new ethers.Contract(
-    tokenAddress,
-    ERC20_INTERFACE,
-    provider
-  );
-
+/**
+ * Fetches token metadata and checks permit support
+ */
+export async function fetchTokenMetadata(tokenAddress: Address): Promise<TokenMetadata> {
   try {
-    console.log('🔄 [DEBUG] Requesting token metadata...');
-    
-    // Get network details for debugging
-    const network = await provider.getNetwork();
-    console.log('🌐 [DEBUG] Current network from provider:', network);
-    
-    const [name, symbol, decimals] = await Promise.all([
-      tokenContract.name(),
-      tokenContract.symbol(),
-      tokenContract.decimals(),
+    // Get basic token info using readContract
+    const [name, symbol, decimalsResult] = await Promise.all([
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'name',
+      }) as Promise<string>,
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'symbol',
+      }) as Promise<string>,
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'decimals',
+      }) as Promise<number>
     ]);
 
-    console.log('✅ [DEBUG] Token metadata retrieved successfully:', { name, symbol, decimals });
-    
     // Check permit support
     const supportsPermit = await checkPermitSupport(tokenAddress);
 
-    return { name, symbol, decimals, supportsPermit };
+    return { 
+      name, 
+      symbol, 
+      decimals: decimalsResult, 
+      supportsPermit 
+    };
   } catch (error) {
-    console.error('❌ [DEBUG] Error fetching token metadata:', error);
-    throw new Error('Failed to fetch token metadata. Make sure this is a valid ERC20 token address.');
+    console.error('Error fetching token metadata:', error);
+    throw new Error('Failed to fetch token metadata. Make sure this is a valid ERC20 token address on the current network.');
   }
 }
 
-// Ensure address has 0x prefix
-function ensureHexAddress(address: string): `0x${string}` {
-  if (!address.startsWith('0x')) {
-    return `0x${address}` as `0x${string}`;
-  }
-  return address as `0x${string}`;
-}
-
-// Generate permit data for signing
+/**
+ * Creates typed data for EIP-712 signing of an ERC20 permit
+ */
 export async function createPermitData(
-  tokenAddress: string,
-  owner: string,
-  spender: string,
+  tokenAddress: Address,
+  owner: Address,
+  spender: Address,
   amount: string,
   chainId: number
 ) {
-  // Connect to token contract to get name, decimals and nonce
-  const provider = getProvider();
-  const tokenContract = new ethers.Contract(
-    tokenAddress,
-    ERC20_INTERFACE,
-    provider
-  );
-
   try {
     // Check permit support first
     const supportsPermit = await checkPermitSupport(tokenAddress);
@@ -194,27 +143,42 @@ export async function createPermitData(
     }
 
     // Get token details
-    const [name, symbol, decimals, nonce] = await Promise.all([
-      tokenContract.name(),
-      tokenContract.symbol(),
-      tokenContract.decimals(),
-      tokenContract.nonces(owner),
+    const [name, symbol, decimals, nonceResult] = await Promise.all([
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'name',
+      }) as Promise<string>,
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'symbol',
+      }) as Promise<string>,
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'decimals',
+      }) as Promise<number>,
+      readContract(config, {
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'nonces',
+        args: [owner]
+      }) as Promise<bigint>
     ]);
 
-    // Adjust amount based on token decimals
-    const adjustedAmount = ethers.utils.parseUnits(amount, decimals).toString();
+    // Adjust amount based on token decimals and convert to BigInt
+    const adjustedAmount = parseUnits(amount, decimals);
     
-    const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
-
-    // Ensure address has 0x prefix
-    const verifyingContractAddress = ensureHexAddress(tokenAddress);
+    // Set deadline to 1 hour from now
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
     // Create the EIP-712 domain separator
     const domain = {
       name,
       version: '1',
       chainId,
-      verifyingContract: verifyingContractAddress,
+      verifyingContract: tokenAddress,
     };
 
     // Create the typed data structure
@@ -227,7 +191,7 @@ export async function createPermitData(
       owner,
       spender,
       value: adjustedAmount,
-      nonce: nonce.toString(),
+      nonce: nonceResult,
       deadline,
     };
 
@@ -239,7 +203,7 @@ export async function createPermitData(
       message,
     };
 
-    // Create parameter objects for execution
+    // Create parameters for execution
     const permitParams: PermitParameters = {
       owner,
       spender,
@@ -256,13 +220,7 @@ export async function createPermitData(
       supportsPermit: true
     };
 
-    // Create full execution context
-    const executionContext: SignedPermitExecutionContext = {
-      permitParams,
-      tokenMetadata
-    };
-
-    return { typedData, permitParams, tokenMetadata, executionContext };
+    return { typedData, permitParams, tokenMetadata };
   } catch (error) {
     console.error('Error creating permit data:', error);
     if (error instanceof Error) {

@@ -1,12 +1,39 @@
 import { useState } from 'react'
-import { ethers } from 'ethers'
 import { useAccount, useChainId } from 'wagmi'
+import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
+import { config } from '../wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
 
-// ERC20 interface for permit execution
-const ERC20_INTERFACE = [
-  'function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external'
-];
+// ERC20 ABI for permit execution
+const ERC20_ABI = [
+  {
+    name: 'permit',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+      { name: 'value', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'v', type: 'uint8' },
+      { name: 'r', type: 'bytes32' },
+      { name: 's', type: 'bytes32' }
+    ],
+    outputs: []
+  }
+] as const;
+
+// Helper function to split a signature into v, r, s components
+const splitSignature = (signature: string) => {
+  const signatureHex = signature.startsWith('0x') ? signature.slice(2) : signature;
+  
+  // A signature is 65 bytes: r (32 bytes) + s (32 bytes) + v (1 byte)
+  const r = `0x${signatureHex.slice(0, 64)}` as `0x${string}`;
+  const s = `0x${signatureHex.slice(64, 128)}` as `0x${string}`;
+  const v = parseInt(signatureHex.slice(128, 130), 16);
+  
+  return { r, s, v };
+};
 
 interface SignatureDisplayProps {
   signature: string | null
@@ -27,12 +54,6 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   
   if (!signature) return null
 
-  // Split signature into v, r, s components
-  const splitSignature = () => {
-    const sig = ethers.utils.splitSignature(signature)
-    return { v: sig.v, r: sig.r, s: sig.s }
-  }
-
   const executePermit = async () => {
     if (!address || !permitParams || !signature) {
       setError('Missing required data')
@@ -44,25 +65,8 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       setError(null)
       setTxHash(null)
 
-      // Check if we have window.ethereum available
-      if (!window.ethereum) {
-        setError('No wallet provider detected. If using WalletConnect, this function is not supported yet.')
-        return
-      }
-
-      // Get a provider and signer
-      const provider = new ethers.providers.Web3Provider(window.ethereum as any)
-      const signer = provider.getSigner()
-      
-      // Create contract instance
-      const tokenContract = new ethers.Contract(
-        permitParams.tokenAddress,
-        ERC20_INTERFACE,
-        signer
-      )
-
-      // Get the signature components
-      const { v, r, s } = splitSignature()
+      // Split the signature into v, r, s components
+      const { v, r, s } = splitSignature(signature)
 
       console.log('Executing permit with params:', {
         owner: permitParams.owner,
@@ -72,20 +76,28 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
         v, r, s
       })
 
-      // Execute the permit transaction
-      const tx = await tokenContract.permit(
-        permitParams.owner,
-        permitParams.spender,
-        permitParams.value,
-        permitParams.deadline,
-        v, r, s
-      )
+      // Execute the permit transaction using Wagmi's writeContract
+      const hash = await writeContract(config, {
+        address: permitParams.tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'permit',
+        args: [
+          permitParams.owner,
+          permitParams.spender,
+          permitParams.value,
+          permitParams.deadline,
+          v,
+          r,
+          s
+        ],
+        chainId: permitParams.chainId
+      })
 
-      setTxHash(tx.hash)
+      setTxHash(hash)
       
       // Wait for transaction to be mined
-      await tx.wait()
-      console.log('Transaction confirmed:', tx.hash)
+      await waitForTransactionReceipt(config, { hash })
+      console.log('Transaction confirmed:', hash)
       
     } catch (err) {
       console.error('Transaction error:', err)
