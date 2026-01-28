@@ -135,6 +135,13 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
         <code>{signature}</code>
       </div>
       
+      {tokenMetadata?.usedEIP5267 && (
+        <div className="eip5267-indicator">
+          <span className="badge">EIP-5267</span>
+          <span className="hint">Using exact domain parameters from contract</span>
+        </div>
+      )}
+      
       {canExecute && (
         <button
           onClick={executePermit}

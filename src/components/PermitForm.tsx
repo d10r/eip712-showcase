@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useAccount, useSignTypedData, useChainId } from 'wagmi'
 import { fetchTokenMetadata, createPermitData, TokenMetadata, PermitParameters } from '../utils/permit'
 import { ethers } from 'ethers'
+import { Address } from 'viem'
 
 interface PermitFormProps {
   onSignatureGenerated: (signature: string, permitParams: PermitParameters, tokenMetadata: TokenMetadata) => void
@@ -32,7 +33,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
       setIsLookingUpToken(true)
       
       try {
-        const metadata = await fetchTokenMetadata(newAddress)
+        const metadata = await fetchTokenMetadata(newAddress as `0x${string}`)
         setTokenMetadata(metadata)
         
         // Display a warning if permit is not supported
@@ -86,9 +87,9 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
 
       // Create permit data with the proper amount formatting
       const { typedData, permitParams } = await createPermitData(
-        tokenAddress,
+        tokenAddress as `0x${string}`,
         address,
-        recipient,
+        recipient as `0x${string}`,
         amount,
         chainId
       )
@@ -145,7 +146,16 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
               {tokenMetadata.supportsPermit !== undefined && (
                 <div className="permit-support">
                   {tokenMetadata.supportsPermit 
-                    ? <span className="permit-supported">Permit supported ✓</span> 
+                    ? (
+                      <span>
+                        <span className="permit-supported">Permit supported ✓</span>
+                        {tokenMetadata.usedEIP5267 && (
+                          <span className="eip5267-badge">
+                            <span className="permit-supported"> + EIP-5267</span>
+                          </span>
+                        )}
+                      </span>
+                    ) 
                     : <span className="permit-unsupported">Permit not supported ✗</span>}
                 </div>
               )}

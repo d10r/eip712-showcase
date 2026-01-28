@@ -58,33 +58,56 @@ const ConnectWallet: React.FC = () => {
       setSwitchingNetwork(true)
       console.log('🔄 [DEBUG] Starting network switch from', chainId, 'to', newChainId);
       
-      // Check if we're using WalletConnect
-      const isWalletConnect = connector?.id === 'walletConnect' || connector?.name === 'WalletConnect';
-      console.log('🔄 [DEBUG] Using WalletConnect:', isWalletConnect);
+      // Debug current state
+      console.log('🔍 [DEBUG] Current state:', {
+        connector: {
+          id: connector?.id,
+          name: connector?.name,
+          type: connector?.type,
+          isWalletConnect: connector?.id === 'walletConnect'
+        },
+        currentChainId: chainId,
+        targetChainId: newChainId,
+        windowEthereum: !!window.ethereum
+      });
+
+      // Use Wagmi's switchChain hook - this is the idiomatic way
+      await switchChain({ chainId: newChainId });
       
-      await switchChain({ chainId: newChainId })
-      
-      console.log('✅ [DEBUG] Network switch successful from Wagmi perspective');
-      
-      // Add a delay and check the chain ID directly from window.ethereum to verify
-      setTimeout(() => {
-        if (window.ethereum) {
-          window.ethereum.request({ method: 'eth_chainId' })
-            .then((result: any) => {
-              const currentChainId = parseInt(result, 16);
-              console.log('🔍 [DEBUG] After switch - window.ethereum chainId:', currentChainId);
-              console.log('🔍 [DEBUG] Expected chainId:', newChainId);
-              console.log('🔍 [DEBUG] Match?', currentChainId === newChainId);
-            })
-            .catch((error: any) => console.error('Error getting chainId after switch:', error));
-        }
-      }, 2000);
+      // Debug after switch attempt
+      console.log('🔍 [DEBUG] After switch attempt:', {
+        wagmiChainId: chainId,
+        windowEthereumChainId: window.ethereum ? await window.ethereum.request({ method: 'eth_chainId' }) : null,
+        connectorDetails: connector
+      });
+
+      // Monitor chain changes for a short period
+      const chainChangeHandler = (newChainId: string) => {
+        console.log('🔍 [DEBUG] Chain change event:', {
+          newChainId: parseInt(newChainId, 16),
+          expectedChainId: newChainId,
+          timestamp: new Date().toISOString()
+        });
+      };
+
+      if (window.ethereum) {
+        window.ethereum.on('chainChanged', chainChangeHandler);
+        setTimeout(() => {
+          window.ethereum.removeListener('chainChanged', chainChangeHandler);
+        }, 5000);
+      }
+
     } catch (error) {
-      console.error("❌ [DEBUG] Error switching network:", error)
+      console.error("❌ [DEBUG] Error switching network:", {
+        error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        connectorDetails: connector
+      });
     } finally {
-      setSwitchingNetwork(false)
+      setSwitchingNetwork(false);
     }
-  }
+  };
 
   if (isConnected && address) {
     return (

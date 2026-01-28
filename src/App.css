@@ -441,4 +441,43 @@ footer {
   0% { opacity: 0.6; }
   50% { opacity: 1; }
   100% { opacity: 0.6; }
+}
+
+/* Add EIP-5267 indicator styles */
+.eip5267-indicator {
+  margin: 12px 0;
+  padding: 8px 12px;
+  background-color: rgba(124, 252, 0, 0.1);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(124, 252, 0, 0.3);
+}
+
+.eip5267-indicator .badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  background-color: var(--sf-green);
+  color: var(--sf-dark);
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.eip5267-indicator .hint {
+  font-size: 14px;
+  color: var(--sf-green);
+}
+
+/* EIP-5267 badge in token info */
+.eip5267-badge {
+  margin-left: 5px;
+  display: inline-block;
+}
+
+.eip5267-badge .permit-supported {
+  font-size: 13px;
+  display: inline-block;
 } 
