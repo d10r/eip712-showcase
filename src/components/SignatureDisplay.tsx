@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAccount, useChainId } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { config } from '../wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
@@ -48,7 +48,6 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   tokenMetadata
 }) => {
   const { address } = useAccount()
-  const chainId = useChainId()
   const [isLoading, setIsLoading] = useState(false)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

@@ -91,9 +91,10 @@ const ConnectWallet: React.FC = () => {
       };
 
       if (window.ethereum) {
-        window.ethereum.on('chainChanged', chainChangeHandler);
+        const ethereum = window.ethereum;
+        ethereum.on('chainChanged', chainChangeHandler);
         setTimeout(() => {
-          window.ethereum.removeListener('chainChanged', chainChangeHandler);
+          ethereum.removeListener('chainChanged', chainChangeHandler);
         }, 5000);
       }
 

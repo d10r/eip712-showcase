@@ -1,6 +1,4 @@
-import { createConfig, http } from 'wagmi'
 import { Chain, mainnet } from 'wagmi/chains'
-import { injected, walletConnect } from 'wagmi/connectors'
 import sfMetadata from '@superfluid-finance/metadata'
 import { defaultWagmiConfig } from '@web3modal/wagmi'
 
@@ -83,12 +81,7 @@ console.log(`Loaded ${allChains.length} chains (${uniqueChainMap.size - (uniqueC
 export const config = defaultWagmiConfig({
   chains: allChains,
   projectId,
-  metadata: {
-    name: 'EIP-712 Demo',
-    description: 'Demo application for EIP-712 signing',
-    url: 'https://eip712-demo.xyz', // replace with your actual URL
-    icons: ['https://avatars.githubusercontent.com/u/37784886']
-  }
+  metadata
 })
 
 export const chains = allChains 

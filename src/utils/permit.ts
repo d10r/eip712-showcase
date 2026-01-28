@@ -188,7 +188,6 @@ export async function createPermitData(
 
     // Get token details
     let name: string, symbol: string, decimals: number, nonceResult: bigint;
-    let domainParams: { name: string; version: string; chainId: number; verifyingContract: Address } | null = null;
     let usedEIP5267 = false;
 
     // For known tokens, use predefined domain values

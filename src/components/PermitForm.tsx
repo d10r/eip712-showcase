@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { useAccount, useSignTypedData, useChainId } from 'wagmi'
 import { fetchTokenMetadata, createPermitData, TokenMetadata, PermitParameters } from '../utils/permit'
 import { ethers } from 'ethers'
-import { Address } from 'viem'
 
 interface PermitFormProps {
   onSignatureGenerated: (signature: string, permitParams: PermitParameters, tokenMetadata: TokenMetadata) => void
@@ -148,7 +147,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
                   {tokenMetadata.supportsPermit 
                     ? (
                       <span>
-                        <span className="permit-supported">Permit supported ✓</span>
+                        <span className="permit-supported">Permit supported</span>
                         {tokenMetadata.usedEIP5267 && (
                           <span className="eip5267-badge">
                             <span className="permit-supported"> + EIP-5267</span>
@@ -156,7 +155,7 @@ const PermitForm: React.FC<PermitFormProps> = ({ onSignatureGenerated }) => {
                         )}
                       </span>
                     ) 
-                    : <span className="permit-unsupported">Permit not supported ✗</span>}
+                    : <span className="permit-unsupported">Permit not supported</span>}
                 </div>
               )}
             </div>
