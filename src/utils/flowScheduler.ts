@@ -1,5 +1,5 @@
 import { readContract } from 'wagmi/actions'
-import { type Address, type Hex, keccak256, toBytes } from 'viem'
+import { type Address, type Hex } from 'viem'
 import { config } from '../wagmi'
 
 export const OP_SEPOLIA_CHAIN_ID = 11155420
