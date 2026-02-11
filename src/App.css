@@ -52,6 +52,38 @@ h2 {
   margin-bottom: 20px;
 }
 
+.tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--sf-light-gray);
+}
+
+.tab {
+  padding: 12px 24px;
+  background: transparent;
+  color: #aaaaaa;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  margin: 0;
+  border-radius: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.tab:hover {
+  color: var(--sf-text);
+  transform: none;
+  box-shadow: none;
+}
+
+.tab.active {
+  color: var(--sf-green);
+  border-bottom-color: var(--sf-green);
+}
+
 main {
   display: flex;
   flex-direction: column;
@@ -92,7 +124,8 @@ main {
 }
 
 /* Form styles */
-.permit-form {
+.permit-form,
+.flow-scheduler-form {
   padding: 24px;
   background-color: var(--sf-gray);
   border-radius: 12px;
@@ -195,6 +228,22 @@ input::placeholder {
   font-size: 14px;
   color: #aaaaaa;
   width: 100%;
+}
+
+.flow-scheduler-debug {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin: -8px 0 12px 0;
+  font-size: 11px;
+  color: #666;
+  font-family: ui-monospace, monospace;
+}
+
+.flow-scheduler-debug small {
+  display: block;
+  font-size: inherit;
+  color: inherit;
 }
 
 .button-container {
@@ -381,6 +430,14 @@ input::placeholder {
   width: 100%;
   margin-top: 5px;
   margin-bottom: 15px;
+}
+
+.button-small {
+  width: auto;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  margin-right: 8px;
+  margin-bottom: 0;
 }
 
 .transaction-success {
