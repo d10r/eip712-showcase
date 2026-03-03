@@ -50,14 +50,6 @@ const ACTION_TYPE = [
   { name: 'userData', type: 'bytes' },
 ] as const
 
-const SECURITY_TYPE = [
-  { name: 'domain', type: 'string' },
-  { name: 'provider', type: 'string' },
-  { name: 'validAfter', type: 'uint256' },
-  { name: 'validBefore', type: 'uint256' },
-  { name: 'nonce', type: 'uint256' },
-] as const
-
 export const EIP712_DOMAIN_NAME = 'ClearSigning'
 export const EIP712_DOMAIN_VERSION = '1'
 
@@ -87,29 +79,35 @@ export function buildScheduleFlowTypedData(
     endDate: scheduleParams.endDate,
     userData: scheduleParams.userData,
   }
-  const securityMessage = {
+  console.log('[FlowScheduler] EIP-712 message.action:', actionMessage)
+  console.log('[FlowScheduler] EIP-712 message (security fields flattened):', {
     domain: security.domain,
     provider: security.provider,
     validAfter: security.validAfter,
     validBefore: security.validBefore,
     nonce: security.nonce,
-  }
-  console.log('[FlowScheduler] EIP-712 message.action:', actionMessage)
-  console.log('[FlowScheduler] EIP-712 message.security:', securityMessage)
+  })
 
   const message = {
     action: actionMessage,
-    security: securityMessage,
+    domain: security.domain,
+    nonce: security.nonce,
+    provider: security.provider,
+    validAfter: security.validAfter,
+    validBefore: security.validBefore,
   }
   const typedData = {
     domain,
     types: {
       ScheduleFlow: [
         { name: 'action', type: 'Action' },
-        { name: 'security', type: 'Security' },
+        { name: 'domain', type: 'string' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'provider', type: 'string' },
+        { name: 'validAfter', type: 'uint256' },
+        { name: 'validBefore', type: 'uint256' },
       ],
       Action: ACTION_TYPE,
-      Security: SECURITY_TYPE,
     },
     primaryType: 'ScheduleFlow' as const,
     message,
@@ -195,18 +193,11 @@ const ONLY712_FORWARDER_ABI = [
     stateMutability: 'pure',
     inputs: [
       { name: 'actionParams', type: 'bytes', internalType: 'bytes' },
-      {
-        name: 'security',
-        type: 'tuple',
-        internalType: 'struct Only712MacroForwarder.SecurityType',
-        components: [
-          { name: 'domain', type: 'string', internalType: 'string' },
-          { name: 'provider', type: 'string', internalType: 'string' },
-          { name: 'validAfter', type: 'uint256', internalType: 'uint256' },
-          { name: 'validBefore', type: 'uint256', internalType: 'uint256' },
-          { name: 'nonce', type: 'uint256', internalType: 'uint256' },
-        ],
-      },
+      { name: 'domain', type: 'string', internalType: 'string' },
+      { name: 'provider', type: 'string', internalType: 'string' },
+      { name: 'validAfter', type: 'uint256', internalType: 'uint256' },
+      { name: 'validBefore', type: 'uint256', internalType: 'uint256' },
+      { name: 'nonce', type: 'uint256', internalType: 'uint256' },
     ],
     outputs: [{ name: '', type: 'bytes', internalType: 'bytes' }],
   },
@@ -238,13 +229,11 @@ export async function getRunMacroParams(
     functionName: 'encodeParams',
     args: [
       actionParams,
-      {
-        domain: security.domain,
-        provider: security.provider,
-        validAfter: security.validAfter,
-        validBefore: security.validBefore,
-        nonce: security.nonce,
-      },
+      security.domain,
+      security.provider,
+      security.validAfter,
+      security.validBefore,
+      security.nonce,
     ],
   })
   return payload as Hex
