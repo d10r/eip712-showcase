@@ -228,7 +228,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
 
       if (wrapInPermit2) {
         if (!effectiveForwarderForPermit2) {
-          setError('Permit2MacroForwarder address not configured. Set VITE_OP_SEPOLIA_PERMIT2_MACRO_FORWARDER_ADDRESS or use Permit2MacroForwarder as the main forwarder.')
+          setError('Permit2ClearSigningMacroForwarder address not configured. Set VITE_OP_SEPOLIA_PERMIT2_MACRO_FORWARDER_ADDRESS or use it as the main forwarder.')
           return
         }
         if (!permit2Config.permit2Address) {
@@ -286,6 +286,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
           witnessTypes: {
             ClearSigning: typedData.types.ScheduleFlow,
             Action: typedData.types.Action,
+            Security: typedData.types.Security,
           },
           witnessTypeString,
           token: permit2Token as Address,

@@ -227,7 +227,7 @@ const ONLY712_FORWARDER_ABI = [
     name: 'getStructHash',
     stateMutability: 'view',
     inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
@@ -237,7 +237,7 @@ const ONLY712_FORWARDER_ABI = [
     name: 'getTypeDefinition',
     stateMutability: 'view',
     inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [{ name: '', type: 'string', internalType: 'string' }],
@@ -247,7 +247,7 @@ const ONLY712_FORWARDER_ABI = [
     name: 'getPermit2WitnessStructHash',
     stateMutability: 'view',
     inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
@@ -257,7 +257,7 @@ const ONLY712_FORWARDER_ABI = [
     name: 'getPermit2WitnessTypeString',
     stateMutability: 'view',
     inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [{ name: '', type: 'string', internalType: 'string' }],
@@ -342,7 +342,7 @@ export async function getStructHash(
 }
 
 /**
- * Fetches the Permit2 witness struct hash from the forwarder (Permit2MacroForwarder).
+ * Fetches the Permit2 witness struct hash from the forwarder (Permit2ClearSigningMacroForwarder).
  * Uses constant "ClearSigning" type name for deterministic ordering.
  */
 export async function getPermit2WitnessStructHash(
@@ -362,7 +362,7 @@ export async function getPermit2WitnessStructHash(
 }
 
 /**
- * Fetches the Permit2 witness type string from the forwarder (Permit2MacroForwarder).
+ * Fetches the Permit2 witness type string from the forwarder (Permit2ClearSigningMacroForwarder).
  * Uses constant "ClearSigning" for deterministic alphabetical ordering.
  */
 export async function getPermit2WitnessTypeString(

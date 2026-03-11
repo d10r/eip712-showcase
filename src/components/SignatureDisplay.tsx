@@ -13,14 +13,14 @@ const relayerUrl = (): string | null => {
   return typeof url === 'string' && url.trim() !== '' ? url.trim().replace(/\/$/, '') : null
 }
 
-// Only712MacroForwarder.runMacro (for FlowScheduler "Execute" via wallet)
+// ClearSigningMacroForwarder.runMacro (for FlowScheduler "Execute" via wallet)
 const RUN_MACRO_ABI = [
   {
     type: 'function',
     name: 'runMacro',
     stateMutability: 'payable',
     inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
       { name: 'signer', type: 'address', internalType: 'address' },
       { name: 'signature', type: 'bytes', internalType: 'bytes' },
@@ -29,7 +29,7 @@ const RUN_MACRO_ABI = [
   },
 ] as const
 
-// Permit2MacroForwarder.runPermit2AndMacro - single entry point for Permit2 + macro execution
+// Permit2ClearSigningMacroForwarder.runPermit2AndMacro - Permit2 + macro execution
 const RUN_PERMIT2_AND_MACRO_ABI = [
   {
     type: 'function',
@@ -39,17 +39,17 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
       {
         name: 'p',
         type: 'tuple',
-        internalType: 'struct Permit2MacroForwarder.Permit2MacroParams',
+        internalType: 'struct Permit2ClearSigningMacroForwarder.Permit2MacroParams',
         components: [
           {
             name: 'permit',
             type: 'tuple',
-            internalType: 'struct ISignatureTransfer.PermitTransferFrom',
+            internalType: 'struct IPermit2.PermitTransferFrom',
             components: [
               {
                 name: 'permitted',
                 type: 'tuple',
-                internalType: 'struct ISignatureTransfer.TokenPermissions',
+                internalType: 'struct IPermit2.TokenPermissions',
                 components: [
                   { name: 'token', type: 'address', internalType: 'address' },
                   { name: 'amount', type: 'uint256', internalType: 'uint256' },
@@ -62,7 +62,7 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
           {
             name: 'transferDetails',
             type: 'tuple',
-            internalType: 'struct ISignatureTransfer.SignatureTransferDetails',
+            internalType: 'struct IPermit2.SignatureTransferDetails',
             components: [
               { name: 'to', type: 'address', internalType: 'address' },
               { name: 'requestedAmount', type: 'uint256', internalType: 'uint256' },
@@ -76,7 +76,7 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
           { name: 'upgradeSuperToken', type: 'address', internalType: 'address' },
         ],
       },
-      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [{ type: 'bool' }],
