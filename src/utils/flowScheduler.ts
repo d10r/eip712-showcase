@@ -81,7 +81,7 @@ export function buildScheduleFlowTypedData(
     userData: scheduleParams.userData,
   }
   console.log('[FlowScheduler] EIP-712 message.action:', actionMessage)
-  console.log('[FlowScheduler] EIP-712 message (security fields flattened):', {
+  console.log('[FlowScheduler] EIP-712 message.security:', {
     domain: security.domain,
     provider: security.provider,
     validAfter: security.validAfter,
@@ -89,26 +89,32 @@ export function buildScheduleFlowTypedData(
     nonce: security.nonce,
   })
 
+  /** Must match ClearSigningMacroForwarder: PrimaryType(Action action, Security security) with nested Security */
   const message = {
     action: actionMessage,
-    domain: security.domain,
-    nonce: security.nonce,
-    provider: security.provider,
-    validAfter: security.validAfter,
-    validBefore: security.validBefore,
+    security: {
+      domain: security.domain,
+      provider: security.provider,
+      validAfter: security.validAfter,
+      validBefore: security.validBefore,
+      nonce: security.nonce,
+    },
   }
   const typedData = {
     domain,
     types: {
       ScheduleFlow: [
         { name: 'action', type: 'Action' },
+        { name: 'security', type: 'Security' },
+      ],
+      Action: ACTION_TYPE,
+      Security: [
         { name: 'domain', type: 'string' },
-        { name: 'nonce', type: 'uint256' },
         { name: 'provider', type: 'string' },
         { name: 'validAfter', type: 'uint256' },
         { name: 'validBefore', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
       ],
-      Action: ACTION_TYPE,
     },
     primaryType: 'ScheduleFlow' as const,
     message,
@@ -181,6 +187,15 @@ export async function getDescriptionAndParamsFromMacro(
   return { description, actionParams: actionParamsBytes as Hex }
 }
 
+/** Security struct for ClearSigning payload - must match IClearSigningForwarder.Security */
+const SECURITY_ABI_COMPONENTS = [
+  { name: 'domain', type: 'string', internalType: 'string' },
+  { name: 'provider', type: 'string', internalType: 'string' },
+  { name: 'validAfter', type: 'uint256', internalType: 'uint256' },
+  { name: 'validBefore', type: 'uint256', internalType: 'uint256' },
+  { name: 'nonce', type: 'uint256', internalType: 'uint256' },
+] as const
+
 const ONLY712_FORWARDER_ABI = [
   {
     type: 'function',
@@ -197,12 +212,13 @@ const ONLY712_FORWARDER_ABI = [
     name: 'encodeParams',
     stateMutability: 'pure',
     inputs: [
-      { name: 'actionParams', type: 'bytes', internalType: 'bytes' },
-      { name: 'domain', type: 'string', internalType: 'string' },
-      { name: 'provider', type: 'string', internalType: 'string' },
-      { name: 'validAfter', type: 'uint256', internalType: 'uint256' },
-      { name: 'validBefore', type: 'uint256', internalType: 'uint256' },
-      { name: 'nonce', type: 'uint256', internalType: 'uint256' },
+      { name: 'params', type: 'bytes', internalType: 'bytes' },
+      {
+        name: 'security',
+        type: 'tuple',
+        internalType: 'struct IClearSigningForwarder.Security',
+        components: [...SECURITY_ABI_COMPONENTS],
+      },
     ],
     outputs: [{ name: '', type: 'bytes', internalType: 'bytes' }],
   },
@@ -275,11 +291,13 @@ export async function getRunMacroParams(
     functionName: 'encodeParams',
     args: [
       actionParams,
-      security.domain,
-      security.provider,
-      security.validAfter,
-      security.validBefore,
-      security.nonce,
+      {
+        domain: security.domain,
+        provider: security.provider,
+        validAfter: security.validAfter,
+        validBefore: security.validBefore,
+        nonce: security.nonce,
+      },
     ],
   })
   const pHex = String(payload)
