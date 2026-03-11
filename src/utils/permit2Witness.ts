@@ -1,0 +1,145 @@
+import type { Address, Hex } from 'viem'
+
+/** Canonical Permit2 address (same on most mainnets) */
+export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address
+
+/** Permit2 EIP-712 domain (no version - Permit2 uses EIP712Domain(string name,uint256 chainId,address verifyingContract)) */
+export const PERMIT2_DOMAIN_NAME = 'Permit2'
+
+/** TokenPermissions type for Permit2 */
+export const TOKEN_PERMISSIONS_TYPE = [
+  { name: 'token', type: 'address' as const },
+  { name: 'amount', type: 'uint256' as const },
+]
+
+/**
+ * Builds the witness type string for Permit2's permitWitnessTransferFrom.
+ * The stub "PermitWitnessTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline,"
+ * is completed by appending: "{witnessTypeName} witness){witnessTypeDefinition}TokenPermissions(address token,uint256 amount)"
+ *
+ * @param primaryTypeName - EIP-712 primary type name of the witness (e.g. "ScheduleFlow")
+ * @param typeDefinition - Full type definition from forwarder.getTypeDefinition (primary + dependent types, no leading type name)
+ */
+export function getClearSigningWitnessTypeString(
+  primaryTypeName: string,
+  typeDefinition: string
+): string {
+  // typeDefinition is e.g. "ScheduleFlow(Action action,...)Action(...)"
+  // We need: "ScheduleFlow witness)ScheduleFlow(Action action,...)Action(...)TokenPermissions(address token,uint256 amount)"
+  const tokenPerms = 'TokenPermissions(address token,uint256 amount)'
+  return `${primaryTypeName} witness)${typeDefinition}${tokenPerms}`
+}
+
+export interface Permit2WitnessTypedDataParams {
+  /** Struct hash of the ClearSigning payload (witness) - used when calling the contract */
+  witnessStructHash: Hex
+  /** Full witness message object for EIP-712 signing (e.g. ScheduleFlow message) */
+  witnessMessage: Record<string, unknown>
+  /** Primary type name of the witness (e.g. "ScheduleFlow") */
+  witnessPrimaryType: string
+  /** Full EIP-712 types for the witness and its dependencies */
+  witnessTypes: Record<string, readonly { name: string; type: string }[]>
+  /** Witness type string for Permit2 contract (from getClearSigningWitnessTypeString) */
+  witnessTypeString: string
+  token: Address
+  amount: bigint
+  spender: Address
+  nonce: bigint
+  deadline: bigint
+  permit2Address: Address
+  chainId: number
+}
+
+export interface PermitWitnessTransferFromTypedData {
+  domain: {
+    name: string
+    chainId: number
+    verifyingContract: Address
+  }
+  types: Record<string, readonly { name: string; type: string }[]>
+  primaryType: 'PermitWitnessTransferFrom'
+  message: {
+    permitted: { token: Address; amount: bigint }
+    spender: Address
+    nonce: bigint
+    deadline: bigint
+    witness: Record<string, unknown>
+  }
+}
+
+/**
+ * Builds EIP-712 typed data for Permit2's PermitWitnessTransferFrom with a ClearSigning witness.
+ * The witness is embedded as the full struct (for signing); the contract receives witnessStructHash.
+ */
+export function buildPermit2WitnessTypedData(
+  params: Permit2WitnessTypedDataParams
+): PermitWitnessTransferFromTypedData {
+  const {
+    witnessMessage,
+    witnessPrimaryType,
+    witnessTypes,
+    token,
+    amount,
+    spender,
+    nonce,
+    deadline,
+    permit2Address,
+    chainId,
+  } = params
+
+  const domain = {
+    name: PERMIT2_DOMAIN_NAME,
+    chainId,
+    verifyingContract: permit2Address,
+  }
+
+  const types: Record<string, readonly { name: string; type: string }[]> = {
+    PermitWitnessTransferFrom: [
+      { name: 'permitted', type: 'TokenPermissions' },
+      { name: 'spender', type: 'address' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'witness', type: witnessPrimaryType },
+    ],
+    TokenPermissions: [...TOKEN_PERMISSIONS_TYPE],
+    ...witnessTypes,
+  }
+
+  const message = {
+    permitted: { token, amount },
+    spender,
+    nonce,
+    deadline,
+    witness: witnessMessage,
+  }
+
+  console.log('[permit2Witness] buildPermit2WitnessTypedData domain:', domain)
+  console.log('[permit2Witness] buildPermit2WitnessTypedData message.permitted:', { token, amount: amount.toString() })
+  console.log('[permit2Witness] buildPermit2WitnessTypedData message.spender:', spender)
+  console.log('[permit2Witness] buildPermit2WitnessTypedData message.nonce:', nonce.toString(), 'deadline:', deadline.toString())
+  console.log('[permit2Witness] buildPermit2WitnessTypedData message.witness:', witnessMessage)
+  console.log('[permit2Witness] buildPermit2WitnessTypedData witnessPrimaryType:', witnessPrimaryType, 'witnessTypes keys:', Object.keys(witnessTypes))
+
+  return {
+    domain,
+    types,
+    primaryType: 'PermitWitnessTransferFrom',
+    message,
+  }
+}
+
+export interface Permit2Config {
+  permit2Address: Address | null
+  wrapperAddress: Address | null
+}
+
+/** Get Permit2 and wrapper config for a chain */
+export function getPermit2Config(_chainId: number): Permit2Config {
+  const permit2 = import.meta.env.VITE_PERMIT2_ADDRESS as string | undefined
+  const wrapper = import.meta.env.VITE_PERMIT2_MACRO_WRAPPER_ADDRESS as string | undefined
+  const addrRegex = /^0x[a-fA-F0-9]{40}$/
+  return {
+    permit2Address: permit2 && addrRegex.test(permit2) ? (permit2 as Address) : PERMIT2_ADDRESS,
+    wrapperAddress: wrapper && addrRegex.test(wrapper) ? (wrapper as Address) : null,
+  }
+}

@@ -223,6 +223,12 @@ input::placeholder {
   margin-left: 5px;
 }
 
+.form-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #888888;
+}
+
 .info-message {
   margin-top: 8px;
   font-size: 14px;

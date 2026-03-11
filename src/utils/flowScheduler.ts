@@ -38,6 +38,7 @@ export interface ScheduleFlowSecurity {
   nonce: bigint
 }
 
+/** Must match FlowScheduler712Macro._ACTION_TYPE_DEFINITION in usermacro-examples */
 const ACTION_TYPE = [
   { name: 'description', type: 'string' },
   { name: 'superToken', type: 'address' },
@@ -153,7 +154,8 @@ export async function getDescriptionAndParamsFromMacro(
   macroAddress: Address,
   scheduleParams: ScheduleFlowParams
 ): Promise<{ description: string; actionParams: Hex }> {
-  console.log('[FlowScheduler] fetching description and actionParams from macro:', macroAddress, 'scheduleParams:', scheduleParams)
+  console.log('[FlowScheduler] getDescriptionAndParamsFromMacro macro:', macroAddress)
+  console.log('[FlowScheduler] getDescriptionAndParamsFromMacro scheduleParams:', JSON.stringify(scheduleParams, (_, v) => (typeof v === 'bigint' ? v.toString() : v)))
   const [description, actionParamsBytes, structHash] = await readContract(config, {
     address: macroAddress,
     abi: FLOW_SCHEDULER_712_MACRO_ABI,
@@ -172,7 +174,10 @@ export async function getDescriptionAndParamsFromMacro(
       },
     ],
   })
-  console.log('[FlowScheduler] macro returned description:', description, 'actionParams length:', actionParamsBytes.length, 'action structHash:', structHash)
+  console.log('[FlowScheduler] macro returned description:', description)
+  const apHex = String(actionParamsBytes)
+  console.log('[FlowScheduler] macro returned actionParams length:', apHex.length, 'hex (first 66 chars):', apHex.slice(0, 66) + (apHex.length > 66 ? '...' : ''))
+  console.log('[FlowScheduler] macro returned action structHash:', structHash)
   return { description, actionParams: actionParamsBytes as Hex }
 }
 
@@ -201,6 +206,46 @@ const ONLY712_FORWARDER_ABI = [
     ],
     outputs: [{ name: '', type: 'bytes', internalType: 'bytes' }],
   },
+  {
+    type: 'function',
+    name: 'getStructHash',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'params', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'getTypeDefinition',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'params', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [{ name: '', type: 'string', internalType: 'string' }],
+  },
+  {
+    type: 'function',
+    name: 'getPermit2WitnessStructHash',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'params', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'getPermit2WitnessTypeString',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'm', type: 'address', internalType: 'contract IUserDefined712Macro' },
+      { name: 'params', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [{ name: '', type: 'string', internalType: 'string' }],
+  },
 ] as const
 
 export async function getNextNonce(forwarderAddress: Address, sender: Address): Promise<bigint> {
@@ -223,6 +268,7 @@ export async function getRunMacroParams(
   actionParams: Hex,
   security: ScheduleFlowSecurity
 ): Promise<Hex> {
+  console.log('[FlowScheduler] getRunMacroParams forwarder:', forwarderAddress)
   const payload = await readContract(config, {
     address: forwarderAddress,
     abi: ONLY712_FORWARDER_ABI,
@@ -236,22 +282,143 @@ export async function getRunMacroParams(
       security.nonce,
     ],
   })
+  const pHex = String(payload)
+  console.log('[FlowScheduler] encodeParams returned payload length:', pHex.length, 'hex (first 66):', pHex.slice(0, 66) + (pHex.length > 66 ? '...' : ''))
   return payload as Hex
 }
 
 export function getFlowSchedulerConfig(chainId: number): {
   forwarderAddress: Address | null
+  permit2ForwarderAddress: Address | null
   macroAddress: Address | null
 } {
   if (chainId !== OP_SEPOLIA_CHAIN_ID) {
-    return { forwarderAddress: null, macroAddress: null }
+    return { forwarderAddress: null, permit2ForwarderAddress: null, macroAddress: null }
   }
   const forwarder = import.meta.env.VITE_OP_SEPOLIA_ONLY712_FORWARDER_ADDRESS as string | undefined
+  const permit2Forwarder = import.meta.env.VITE_OP_SEPOLIA_PERMIT2_MACRO_FORWARDER_ADDRESS as string | undefined
   const macro = import.meta.env.VITE_OP_SEPOLIA_FLOW_SCHEDULER_712_MACRO_ADDRESS as string | undefined
+  const addr = (a: string) => (/^0x[a-fA-F0-9]{40}$/.test(a) ? (a as Address) : null)
   return {
-    forwarderAddress: forwarder && /^0x[a-fA-F0-9]{40}$/.test(forwarder) ? (forwarder as Address) : null,
-    macroAddress: macro && /^0x[a-fA-F0-9]{40}$/.test(macro) ? (macro as Address) : null,
+    forwarderAddress: addr(forwarder ?? ''),
+    permit2ForwarderAddress: addr(permit2Forwarder ?? '') ?? (forwarder ? addr(forwarder) : null),
+    macroAddress: addr(macro ?? ''),
   }
+}
+
+/**
+ * Fetches the struct hash for the ClearSigning payload from the forwarder.
+ */
+export async function getStructHash(
+  forwarderAddress: Address,
+  macroAddress: Address,
+  params: Hex
+): Promise<Hex> {
+  const structHash = await readContract(config, {
+    address: forwarderAddress,
+    abi: ONLY712_FORWARDER_ABI,
+    functionName: 'getStructHash',
+    args: [macroAddress, params],
+  })
+  return structHash as Hex
+}
+
+/**
+ * Fetches the Permit2 witness struct hash from the forwarder (Permit2MacroForwarder).
+ * Uses constant "ClearSigning" type name for deterministic ordering.
+ */
+export async function getPermit2WitnessStructHash(
+  forwarderAddress: Address,
+  macroAddress: Address,
+  params: Hex
+): Promise<Hex> {
+  console.log('[FlowScheduler] getPermit2WitnessStructHash forwarder:', forwarderAddress, 'macro:', macroAddress)
+  const structHash = await readContract(config, {
+    address: forwarderAddress,
+    abi: ONLY712_FORWARDER_ABI,
+    functionName: 'getPermit2WitnessStructHash',
+    args: [macroAddress, params],
+  })
+  console.log('[FlowScheduler] getPermit2WitnessStructHash returned:', structHash)
+  return structHash as Hex
+}
+
+/**
+ * Fetches the Permit2 witness type string from the forwarder (Permit2MacroForwarder).
+ * Uses constant "ClearSigning" for deterministic alphabetical ordering.
+ */
+export async function getPermit2WitnessTypeString(
+  forwarderAddress: Address,
+  macroAddress: Address,
+  params: Hex
+): Promise<string> {
+  const result = await readContract(config, {
+    address: forwarderAddress,
+    abi: ONLY712_FORWARDER_ABI,
+    functionName: 'getPermit2WitnessTypeString',
+    args: [macroAddress, params],
+  })
+  console.log('[FlowScheduler] getPermit2WitnessTypeString length:', result.length, 'preview:', result.slice(0, 120) + '...')
+  return result
+}
+
+/**
+ * Fetches the type definition from the forwarder for building the witness type string.
+ */
+export async function getTypeDefinition(
+  forwarderAddress: Address,
+  macroAddress: Address,
+  params: Hex
+): Promise<string> {
+  const result = await readContract(config, {
+    address: forwarderAddress,
+    abi: ONLY712_FORWARDER_ABI,
+    functionName: 'getTypeDefinition',
+    args: [macroAddress, params],
+  })
+  console.log('[FlowScheduler] getTypeDefinition:', result)
+  return result
+}
+
+/** Minimal ABI for fetching underlying token from SuperToken */
+const SUPERTOKEN_UNDERLYING_ABI = [
+  {
+    type: 'function',
+    name: 'getUnderlyingToken',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address', internalType: 'address' }],
+  },
+] as const
+
+/** Minimal ABI for ERC20 decimals */
+const ERC20_DECIMALS_ABI = [
+  {
+    type: 'function',
+    name: 'decimals',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8', internalType: 'uint8' }],
+  },
+] as const
+
+export async function getUnderlyingToken(superTokenAddress: Address): Promise<Address | null> {
+  const underlying = await readContract(config, {
+    address: superTokenAddress,
+    abi: SUPERTOKEN_UNDERLYING_ABI,
+    functionName: 'getUnderlyingToken',
+  })
+  if (!underlying || underlying === '0x0000000000000000000000000000000000000000') return null
+  return underlying as Address
+}
+
+export async function getTokenDecimals(tokenAddress: Address): Promise<number> {
+  const decimals = await readContract(config, {
+    address: tokenAddress,
+    abi: ERC20_DECIMALS_ABI,
+    functionName: 'decimals',
+  })
+  return Number(decimals)
 }
 
 export { SECURITY_DOMAIN, SECURITY_PROVIDER }
