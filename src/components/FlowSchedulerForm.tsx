@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAccount, useSignTypedData, useChainId } from 'wagmi'
+import { useFlowSchedulerConfig } from '../hooks/useFlowSchedulerConfig'
 import {
-  getFlowSchedulerConfig,
   getDescriptionAndParamsFromMacro,
   getRunMacroParams,
   getNextNonce,
@@ -69,8 +69,8 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
   const { address } = useAccount()
   const chainId = useChainId()
   const { signTypedDataAsync } = useSignTypedData()
-
-  const config = chainId != null ? getFlowSchedulerConfig(chainId) : { forwarderAddress: null, permit2ForwarderAddress: null, macroAddress: null }
+  const { config, isSupported, unsupportedReason, isLoading: isConfigLoading } =
+    useFlowSchedulerConfig(chainId ?? undefined)
   const { forwarderAddress, permit2ForwarderAddress, macroAddress } = config
   const effectiveForwarderForPermit2 = permit2ForwarderAddress ?? forwarderAddress
   const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null, wrapperAddress: null }
@@ -228,7 +228,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
 
       if (wrapInPermit2) {
         if (!effectiveForwarderForPermit2) {
-          setError('Permit2ClearSigningMacroForwarder address not configured. Set VITE_OP_SEPOLIA_PERMIT2_MACRO_FORWARDER_ADDRESS or use it as the main forwarder.')
+          setError('Permit2ClearSigningMacroForwarder is not deployed on this chain.')
           return
         }
         if (!permit2Config.permit2Address) {
@@ -368,13 +368,31 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     }
   }
 
-  if (chainId != null && getFlowSchedulerConfig(chainId).forwarderAddress == null) {
-    return (
-      <div className="flow-scheduler-form">
-        <h2>FlowScheduler</h2>
-        <p className="info-message">Contract addresses are not configured for the connected chain. Set VITE_OP_SEPOLIA_ONLY712_FORWARDER_ADDRESS and VITE_OP_SEPOLIA_FLOW_SCHEDULER_712_MACRO_ADDRESS for OP Sepolia.</p>
-      </div>
-    )
+  if (chainId != null) {
+    if (isConfigLoading) {
+      return (
+        <div className="flow-scheduler-form">
+          <h2>FlowScheduler</h2>
+          <p className="info-message">Checking if this chain supports macro forwarders…</p>
+        </div>
+      )
+    }
+    if (!isSupported) {
+      const message =
+        unsupportedReason === 'forwarder_not_deployed'
+          ? 'ClearSigningMacroForwarder is not deployed on this chain.'
+          : unsupportedReason === 'macro_not_configured'
+            ? 'FlowScheduler712Macro is not configured for this chain. Add VITE_<chainId>_FLOW_SCHEDULER_712_MACRO_ADDRESS or VITE_<network>_FLOW_SCHEDULER_712_MACRO_ADDRESS to .env (e.g. VITE_8453_... for Base).'
+            : unsupportedReason === 'forwarder_not_configured'
+              ? 'Forwarder addresses not configured. Set VITE_CLEAR_SIGNING_FORWARDER_ADDRESS and/or VITE_PERMIT2_CLEAR_SIGNING_FORWARDER_ADDRESS.'
+              : 'FlowScheduler is not supported on this chain.'
+      return (
+        <div className="flow-scheduler-form">
+          <h2>FlowScheduler</h2>
+          <p className="info-message">{message}</p>
+        </div>
+      )
+    }
   }
 
   return (

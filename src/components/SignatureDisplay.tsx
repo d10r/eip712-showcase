@@ -3,7 +3,7 @@ import { useAccount, useChainId, useReadContract } from 'wagmi'
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { config } from '../wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
-import { getFlowSchedulerConfig } from '../utils/flowScheduler'
+import { useFlowSchedulerConfig } from '../hooks/useFlowSchedulerConfig'
 import { getPermit2Config } from '../utils/permit2Witness'
 import type { FlowSchedulerSignatureResult } from './FlowSchedulerForm'
 import sfMetadata from '@superfluid-finance/metadata'
@@ -180,6 +180,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
 }) => {
   const { address } = useAccount()
   const chainId = useChainId()
+  const { config: flowSchedulerConfig } = useFlowSchedulerConfig(chainId ?? undefined)
   const [isLoading, setIsLoading] = useState(false)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -188,7 +189,6 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
 
   const isFlowScheduler = !!flowSchedulerResult
   const hasPermit2 = !!(flowSchedulerResult?.permit2)
-  const flowSchedulerConfig = chainId != null ? getFlowSchedulerConfig(chainId) : { forwarderAddress: null, permit2ForwarderAddress: null, macroAddress: null }
   const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null, wrapperAddress: null }
 
   const canExecuteFlowScheduler =

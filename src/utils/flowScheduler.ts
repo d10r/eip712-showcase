@@ -1,8 +1,40 @@
 import { readContract } from 'wagmi/actions'
 import { type Address, type Hex } from 'viem'
+import { createPublicClient, http } from 'viem'
 import { config } from '../wagmi'
+import sfMetadata from '@superfluid-finance/metadata'
 
-export const OP_SEPOLIA_CHAIN_ID = 11155420
+const addr = (a: string) => (/^0x[a-fA-F0-9]{40}$/.test(a) ? (a as Address) : null)
+
+/** ClearSigningMacroForwarder address from env (deterministic, same across chains where deployed) */
+function getClearSigningForwarderAddress(): Address | null {
+  return addr((import.meta.env.VITE_CLEAR_SIGNING_FORWARDER_ADDRESS as string) ?? '') ?? null
+}
+
+/** Permit2ClearSigningMacroForwarder address from env (deterministic, same across chains where deployed) */
+function getPermit2ClearSigningForwarderAddress(): Address | null {
+  return addr((import.meta.env.VITE_PERMIT2_CLEAR_SIGNING_FORWARDER_ADDRESS as string) ?? '') ?? null
+}
+
+/** Resolve FlowScheduler712Macro address from env using chainId or SF metadata canonical name */
+function getFlowSchedulerMacroAddressFromEnv(chainId: number): Address | null {
+  const metadata = sfMetadata as {
+    getNetworkByChainId?: (chainId: number) => { uppercaseName?: string } | undefined
+    networks?: { chainId: number; uppercaseName?: string }[]
+  }
+  const network = metadata.getNetworkByChainId?.(chainId) ?? metadata.networks?.find((n) => n.chainId === chainId)
+  const env = import.meta.env as Record<string, string | undefined>
+  const tryKey = (key: string) => addr(env[key] ?? '') ?? null
+  const keysToTry = [
+    `VITE_${chainId}_FLOW_SCHEDULER_712_MACRO_ADDRESS`,
+    ...(network?.uppercaseName ? [`VITE_${network.uppercaseName}_FLOW_SCHEDULER_712_MACRO_ADDRESS`] : []),
+  ]
+  for (const key of keysToTry) {
+    const a = tryKey(key)
+    if (a) return a
+  }
+  return null
+}
 
 const SECURITY_DOMAIN = 'flowscheduler.xyz'
 const SECURITY_PROVIDER = 'macros.superfluid.eth'
@@ -196,7 +228,8 @@ const SECURITY_ABI_COMPONENTS = [
   { name: 'nonce', type: 'uint256', internalType: 'uint256' },
 ] as const
 
-const ONLY712_FORWARDER_ABI = [
+/** @deprecated Use CLEAR_SIGNING_FORWARDER_ABI - ONLY712 was renamed to ClearSigningForwarder */
+const CLEAR_SIGNING_FORWARDER_ABI = [
   {
     type: 'function',
     name: 'getNonce',
@@ -264,11 +297,24 @@ const ONLY712_FORWARDER_ABI = [
   },
 ] as const
 
+/** Check if a contract exists at the given address on the chain (via eth_getCode) */
+export async function isContractDeployed(address: Address, chainId: number): Promise<boolean> {
+  const chain = config.chains.find((c) => c.id === chainId)
+  const rpcUrl = chain?.rpcUrls?.default?.http?.[0]
+  if (!rpcUrl) return false
+  const client = createPublicClient({
+    chain: chain!,
+    transport: http(rpcUrl),
+  })
+  const code = await client.getBytecode({ address })
+  return code != null && code.length > 2 // 0x or 0x00 = no contract
+}
+
 export async function getNextNonce(forwarderAddress: Address, sender: Address): Promise<bigint> {
   const key = flowSchedulerNonceKey()
   const nonce = await readContract(config, {
     address: forwarderAddress,
-    abi: ONLY712_FORWARDER_ABI,
+    abi: CLEAR_SIGNING_FORWARDER_ABI,
     functionName: 'getNonce',
     args: [sender, key],
   })
@@ -287,7 +333,7 @@ export async function getRunMacroParams(
   console.log('[FlowScheduler] getRunMacroParams forwarder:', forwarderAddress)
   const payload = await readContract(config, {
     address: forwarderAddress,
-    abi: ONLY712_FORWARDER_ABI,
+    abi: CLEAR_SIGNING_FORWARDER_ABI,
     functionName: 'encodeParams',
     args: [
       actionParams,
@@ -305,24 +351,54 @@ export async function getRunMacroParams(
   return payload as Hex
 }
 
-export function getFlowSchedulerConfig(chainId: number): {
+export type FlowSchedulerUnsupportedReason =
+  | 'forwarder_not_deployed'
+  | 'macro_not_configured'
+  | 'forwarder_not_configured'
+
+export interface FlowSchedulerConfig {
   forwarderAddress: Address | null
   permit2ForwarderAddress: Address | null
   macroAddress: Address | null
-} {
-  if (chainId !== OP_SEPOLIA_CHAIN_ID) {
-    return { forwarderAddress: null, permit2ForwarderAddress: null, macroAddress: null }
+  /** Present when not fully supported, explains why */
+  unsupportedReason?: FlowSchedulerUnsupportedReason
+}
+
+const NULL_CONFIG: FlowSchedulerConfig = {
+  forwarderAddress: null,
+  permit2ForwarderAddress: null,
+  macroAddress: null,
+}
+
+
+/**
+ * Async config: checks via RPC if the forwarders are deployed on the chain.
+ * Forwarder addresses come from env (deterministic across chains); support is determined by on-chain check.
+ * Macro address comes from chain-specific env (VITE_<chainId>_... or VITE_<SF_NAME>_...).
+ * Permit2ClearSigningMacroForwarder extends ClearSigningMacroForwarder, so it can serve both roles.
+ */
+export async function getFlowSchedulerConfigAsync(chainId: number): Promise<FlowSchedulerConfig> {
+  const clearSigningAddr = getClearSigningForwarderAddress()
+  const permit2Addr = getPermit2ClearSigningForwarderAddress()
+  if (!clearSigningAddr && !permit2Addr) {
+    return { ...NULL_CONFIG, unsupportedReason: 'forwarder_not_configured' }
   }
-  const forwarder = import.meta.env.VITE_OP_SEPOLIA_ONLY712_FORWARDER_ADDRESS as string | undefined
-  const permit2Forwarder = import.meta.env.VITE_OP_SEPOLIA_PERMIT2_MACRO_FORWARDER_ADDRESS as string | undefined
-  const macro = import.meta.env.VITE_OP_SEPOLIA_FLOW_SCHEDULER_712_MACRO_ADDRESS as string | undefined
-  const addr = (a: string) => (/^0x[a-fA-F0-9]{40}$/.test(a) ? (a as Address) : null)
+  const [clearSigningDeployed, permit2Deployed] = await Promise.all([
+    clearSigningAddr ? isContractDeployed(clearSigningAddr, chainId) : Promise.resolve(false),
+    permit2Addr ? isContractDeployed(permit2Addr, chainId) : Promise.resolve(false),
+  ])
+  if (!clearSigningDeployed && !permit2Deployed) {
+    return { ...NULL_CONFIG, unsupportedReason: 'forwarder_not_deployed' }
+  }
+  const macroAddress = getFlowSchedulerMacroAddressFromEnv(chainId)
   return {
-    forwarderAddress: addr(forwarder ?? ''),
-    permit2ForwarderAddress: addr(permit2Forwarder ?? '') ?? (forwarder ? addr(forwarder) : null),
-    macroAddress: addr(macro ?? ''),
+    forwarderAddress: clearSigningDeployed ? clearSigningAddr! : permit2Deployed ? permit2Addr! : null,
+    permit2ForwarderAddress: permit2Deployed ? permit2Addr! : null,
+    macroAddress,
+    ...(macroAddress == null && { unsupportedReason: 'macro_not_configured' as const }),
   }
 }
+
 
 /**
  * Fetches the struct hash for the ClearSigning payload from the forwarder.
@@ -334,7 +410,7 @@ export async function getStructHash(
 ): Promise<Hex> {
   const structHash = await readContract(config, {
     address: forwarderAddress,
-    abi: ONLY712_FORWARDER_ABI,
+    abi: CLEAR_SIGNING_FORWARDER_ABI,
     functionName: 'getStructHash',
     args: [macroAddress, params],
   })
@@ -353,7 +429,7 @@ export async function getPermit2WitnessStructHash(
   console.log('[FlowScheduler] getPermit2WitnessStructHash forwarder:', forwarderAddress, 'macro:', macroAddress)
   const structHash = await readContract(config, {
     address: forwarderAddress,
-    abi: ONLY712_FORWARDER_ABI,
+    abi: CLEAR_SIGNING_FORWARDER_ABI,
     functionName: 'getPermit2WitnessStructHash',
     args: [macroAddress, params],
   })
@@ -372,7 +448,7 @@ export async function getPermit2WitnessTypeString(
 ): Promise<string> {
   const result = await readContract(config, {
     address: forwarderAddress,
-    abi: ONLY712_FORWARDER_ABI,
+    abi: CLEAR_SIGNING_FORWARDER_ABI,
     functionName: 'getPermit2WitnessTypeString',
     args: [macroAddress, params],
   })
@@ -390,7 +466,7 @@ export async function getTypeDefinition(
 ): Promise<string> {
   const result = await readContract(config, {
     address: forwarderAddress,
-    abi: ONLY712_FORWARDER_ABI,
+    abi: CLEAR_SIGNING_FORWARDER_ABI,
     functionName: 'getTypeDefinition',
     args: [macroAddress, params],
   })
