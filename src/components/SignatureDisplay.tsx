@@ -189,7 +189,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
 
   const isFlowScheduler = !!flowSchedulerResult
   const hasPermit2 = !!(flowSchedulerResult?.permit2)
-  const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null, wrapperAddress: null }
+  const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null }
 
   const canExecuteFlowScheduler =
     isFlowScheduler &&

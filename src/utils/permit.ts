@@ -61,16 +61,6 @@ export interface PermitParameters {
   chainId: number
 }
 
-// Data for the permit execution UI component
-export interface SignedPermitExecutionContext {
-  permitParams: PermitParameters
-  tokenMetadata: TokenMetadata
-  signature?: string
-}
-
-// For backward compatibility
-export type PermitData = SignedPermitExecutionContext;
-
 /**
  * Checks if a token supports the permit functionality (EIP-2612)
  */

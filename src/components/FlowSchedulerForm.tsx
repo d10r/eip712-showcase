@@ -73,7 +73,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     useFlowSchedulerConfig(chainId ?? undefined)
   const { forwarderAddress, permit2ForwarderAddress, macroAddress } = config
   const effectiveForwarderForPermit2 = permit2ForwarderAddress ?? forwarderAddress
-  const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null, wrapperAddress: null }
+  const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null }
 
   const [superToken, setSuperToken] = useState('')
   const [receiver, setReceiver] = useState('')

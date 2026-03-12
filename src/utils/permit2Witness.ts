@@ -12,24 +12,6 @@ export const TOKEN_PERMISSIONS_TYPE = [
   { name: 'amount', type: 'uint256' as const },
 ]
 
-/**
- * Builds the witness type string for Permit2's permitWitnessTransferFrom.
- * The stub "PermitWitnessTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline,"
- * is completed by appending: "{witnessTypeName} witness){witnessTypeDefinition}TokenPermissions(address token,uint256 amount)"
- *
- * @param primaryTypeName - EIP-712 primary type name of the witness (e.g. "ScheduleFlow")
- * @param typeDefinition - Full type definition from forwarder.getTypeDefinition (primary + dependent types, no leading type name)
- */
-export function getClearSigningWitnessTypeString(
-  primaryTypeName: string,
-  typeDefinition: string
-): string {
-  // typeDefinition is e.g. "ScheduleFlow(Action action,...)Action(...)"
-  // We need: "ScheduleFlow witness)ScheduleFlow(Action action,...)Action(...)TokenPermissions(address token,uint256 amount)"
-  const tokenPerms = 'TokenPermissions(address token,uint256 amount)'
-  return `${primaryTypeName} witness)${typeDefinition}${tokenPerms}`
-}
-
 export interface Permit2WitnessTypedDataParams {
   /** Struct hash of the ClearSigning payload (witness) - used when calling the contract */
   witnessStructHash: Hex
@@ -39,7 +21,7 @@ export interface Permit2WitnessTypedDataParams {
   witnessPrimaryType: string
   /** Full EIP-712 types for the witness and its dependencies */
   witnessTypes: Record<string, readonly { name: string; type: string }[]>
-  /** Witness type string for Permit2 contract (from getClearSigningWitnessTypeString) */
+  /** Witness type string for Permit2 contract (from forwarder.getPermit2WitnessTypeString) */
   witnessTypeString: string
   token: Address
   amount: bigint
@@ -130,16 +112,13 @@ export function buildPermit2WitnessTypedData(
 
 export interface Permit2Config {
   permit2Address: Address | null
-  wrapperAddress: Address | null
 }
 
-/** Get Permit2 and wrapper config for a chain */
+/** Get Permit2 config for a chain */
 export function getPermit2Config(_chainId: number): Permit2Config {
   const permit2 = import.meta.env.VITE_PERMIT2_ADDRESS as string | undefined
-  const wrapper = import.meta.env.VITE_PERMIT2_MACRO_WRAPPER_ADDRESS as string | undefined
   const addrRegex = /^0x[a-fA-F0-9]{40}$/
   return {
     permit2Address: permit2 && addrRegex.test(permit2) ? (permit2 as Address) : PERMIT2_ADDRESS,
-    wrapperAddress: wrapper && addrRegex.test(wrapper) ? (wrapper as Address) : null,
   }
 }
