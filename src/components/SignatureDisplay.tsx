@@ -476,7 +476,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       const res = await fetch(`${baseUrl}/relay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload, (_, v) => (typeof v === 'bigint' ? v.toString() : v)),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
