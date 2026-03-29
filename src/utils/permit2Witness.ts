@@ -13,7 +13,7 @@ export const TOKEN_PERMISSIONS_TYPE = [
 ]
 
 export interface Permit2WitnessTypedDataParams {
-  /** Struct hash of the ClearSigning payload (witness) - used when calling the contract */
+  /** Struct hash of the ClearMacro payload (witness) - used when calling the contract */
   witnessStructHash: Hex
   /** Full witness message object for EIP-712 signing (e.g. ScheduleFlow message) */
   witnessMessage: Record<string, unknown>
@@ -50,7 +50,7 @@ export interface PermitWitnessTransferFromTypedData {
 }
 
 /**
- * Builds EIP-712 typed data for Permit2's PermitWitnessTransferFrom with a ClearSigning witness.
+ * Builds EIP-712 typed data for Permit2's PermitWitnessTransferFrom with a ClearMacro witness.
  * The witness is embedded as the full struct (for signing); the contract receives witnessStructHash.
  */
 export function buildPermit2WitnessTypedData(

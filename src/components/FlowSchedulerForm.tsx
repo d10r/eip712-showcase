@@ -57,7 +57,7 @@ export interface FlowSchedulerSignatureResult {
   /** Decoded schedule fields (inputs to the macro). */
   scheduleParams: ScheduleFlowParams
   security: ScheduleFlowSecurity
-  /** When set, signature is over Permit2 PermitWitnessTransferFrom; otherwise over ClearSigning ScheduleFlow. */
+  /** When set, signature is over Permit2 PermitWitnessTransferFrom; otherwise over ClearMacro ScheduleFlow. */
   permit2?: Permit2Data
 }
 
@@ -105,15 +105,18 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     }
     let cancelled = false
     setIsLoadingNonce(true)
-    getNextNonce(forwarderAddress, address)
+    getNextNonce(forwarderAddress, address, chainId)
       .then((n) => {
         if (!cancelled) {
           setNonce(n)
           console.log('[FlowScheduler] next nonce:', n.toString())
         }
       })
-      .catch(() => {
-        if (!cancelled) setNonce(null)
+      .catch((err) => {
+        if (!cancelled) {
+          setNonce(null)
+          console.error('[FlowScheduler] getNextNonce failed:', err)
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingNonce(false)
@@ -228,7 +231,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
 
       if (wrapInPermit2) {
         if (!effectiveForwarderForPermit2) {
-          setError('Permit2ClearSigningMacroForwarder is not deployed on this chain.')
+          setError('Permit2ClearMacroForwarder is not deployed on this chain.')
           return
         }
         if (!permit2Config.permit2Address) {
@@ -282,9 +285,9 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
         const permit2TypedData = buildPermit2WitnessTypedData({
           witnessStructHash: witnessStructHash as Hex,
           witnessMessage: typedData.message,
-          witnessPrimaryType: 'ClearSigning',
+          witnessPrimaryType: 'ClearMacro',
           witnessTypes: {
-            ClearSigning: typedData.types.ScheduleFlow,
+            ClearMacro: typedData.types.ScheduleFlow,
             Action: typedData.types.Action,
             Security: typedData.types.Security,
           },
@@ -380,11 +383,11 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     if (!isSupported) {
       const message =
         unsupportedReason === 'forwarder_not_deployed'
-          ? 'ClearSigningMacroForwarder is not deployed on this chain.'
+          ? 'ClearMacroForwarder is not deployed on this chain.'
           : unsupportedReason === 'macro_not_configured'
             ? 'FlowScheduler712Macro is not configured for this chain. Add VITE_<chainId>_FLOW_SCHEDULER_712_MACRO_ADDRESS or VITE_<network>_FLOW_SCHEDULER_712_MACRO_ADDRESS to .env (e.g. VITE_8453_... for Base).'
             : unsupportedReason === 'forwarder_not_configured'
-              ? 'Forwarder addresses not configured. Set VITE_CLEAR_SIGNING_FORWARDER_ADDRESS and/or VITE_PERMIT2_CLEAR_SIGNING_FORWARDER_ADDRESS.'
+              ? 'Forwarder addresses not configured. Set VITE_CLEAR_MACRO_FORWARDER_ADDRESS and/or VITE_PERMIT2_CLEAR_MACRO_FORWARDER_ADDRESS.'
               : 'FlowScheduler is not supported on this chain.'
       return (
         <div className="flow-scheduler-form">

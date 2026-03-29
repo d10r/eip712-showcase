@@ -13,14 +13,14 @@ const relayerUrl = (): string | null => {
   return typeof url === 'string' && url.trim() !== '' ? url.trim().replace(/\/$/, '') : null
 }
 
-// ClearSigningMacroForwarder.runMacro (for FlowScheduler "Execute" via wallet)
+// ClearMacroForwarder.runMacro (for FlowScheduler "Execute" via wallet)
 const RUN_MACRO_ABI = [
   {
     type: 'function',
     name: 'runMacro',
     stateMutability: 'payable',
     inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
       { name: 'signer', type: 'address', internalType: 'address' },
       { name: 'signature', type: 'bytes', internalType: 'bytes' },
@@ -29,7 +29,7 @@ const RUN_MACRO_ABI = [
   },
 ] as const
 
-// Permit2ClearSigningMacroForwarder.runPermit2AndMacro - Permit2 + macro execution
+// Permit2ClearMacroForwarder.runPermit2AndMacro - Permit2 + macro execution
 const RUN_PERMIT2_AND_MACRO_ABI = [
   {
     type: 'function',
@@ -39,7 +39,7 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
       {
         name: 'p',
         type: 'tuple',
-        internalType: 'struct Permit2ClearSigningMacroForwarder.Permit2MacroParams',
+        internalType: 'struct Permit2ClearMacroForwarder.Permit2MacroParams',
         components: [
           {
             name: 'permit',
@@ -76,7 +76,7 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
           { name: 'upgradeSuperToken', type: 'address', internalType: 'address' },
         ],
       },
-      { name: 'm', type: 'address', internalType: 'contract IClearSigningMacro' },
+      { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
       { name: 'params', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [{ type: 'bool' }],
@@ -199,7 +199,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
     !!flowSchedulerConfig.macroAddress &&
     chainId != null
 
-  const canExecuteClearSigningOnly = canExecuteFlowScheduler && !hasPermit2
+  const canExecuteClearMacroOnly = canExecuteFlowScheduler && !hasPermit2
 
   const permit2Forwarder = flowSchedulerConfig.permit2ForwarderAddress ?? flowSchedulerConfig.forwarderAddress
   const canExecutePermit2AndMacro =
@@ -524,7 +524,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       {hasPermit2 && (
         <div className="eip5267-indicator">
           <span className="badge">Permit2</span>
-          <span className="hint">Signature over PermitWitnessTransferFrom with ClearSigning witness</span>
+          <span className="hint">Signature over PermitWitnessTransferFrom with ClearMacro witness</span>
         </div>
       )}
 
@@ -538,7 +538,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
         </button>
       )}
 
-      {canExecuteClearSigningOnly && (
+      {canExecuteClearMacroOnly && (
         <>
           <button
             onClick={executeFlowScheduler}
