@@ -6,14 +6,14 @@ import sfMetadata from '@superfluid-finance/metadata'
 
 const addr = (a: string) => (/^0x[a-fA-F0-9]{40}$/.test(a) ? (a as Address) : null)
 
-/** ClearMacroForwarder address from env (deterministic, same across chains where deployed) */
-function getClearMacroForwarderAddress(): Address | null {
+/** ClearMacroForwarderV1 address from env (deterministic, same across chains where deployed) */
+function getClearMacroForwarderV1Address(): Address | null {
   return addr((import.meta.env.VITE_CLEAR_MACRO_FORWARDER_ADDRESS as string) ?? '') ?? null
 }
 
-/** Permit2ClearMacroForwarder address from env (deterministic, same across chains where deployed) */
-function getPermit2ClearMacroForwarderAddress(): Address | null {
-  return addr((import.meta.env.VITE_PERMIT2_CLEAR_MACRO_FORWARDER_ADDRESS as string) ?? '') ?? null
+/** ClearMacroForwarderV1WithPermit2 address from env (deterministic, same across chains where deployed) */
+function getClearMacroForwarderV1WithPermit2Address(): Address | null {
+  return addr((import.meta.env.VITE_CLEAR_MACRO_FORWARDER_WITH_PERMIT2_ADDRESS as string) ?? '') ?? null
 }
 
 /** Resolve FlowScheduler712Macro address from env using chainId or SF metadata canonical name */
@@ -121,7 +121,7 @@ export function buildScheduleFlowTypedData(
     nonce: security.nonce,
   })
 
-  /** Must match ClearMacroForwarder: PrimaryType(Action action, Security security) with nested Security */
+  /** Must match ClearMacroForwarderV1: PrimaryType(Action action, Security security) with nested Security */
   const message = {
     action: actionMessage,
     security: {
@@ -219,7 +219,7 @@ export async function getDescriptionAndParamsFromMacro(
   return { description, actionParams: actionParamsBytes as Hex }
 }
 
-/** Security struct for ClearMacro payload - must match IClearMacroForwarder.Security */
+/** Security struct for ClearMacro payload - must match IClearMacroForwarderV1.Security */
 const SECURITY_ABI_COMPONENTS = [
   { name: 'domain', type: 'string', internalType: 'string' },
   { name: 'provider', type: 'string', internalType: 'string' },
@@ -228,7 +228,7 @@ const SECURITY_ABI_COMPONENTS = [
   { name: 'nonce', type: 'uint256', internalType: 'uint256' },
 ] as const
 
-/** ABI for ClearMacroForwarder / Permit2ClearMacroForwarder (IClearMacroForwarder) */
+/** ABI for ClearMacroForwarderV1 / ClearMacroForwarderV1WithPermit2 (IClearMacroForwarderV1) */
 const CLEAR_MACRO_FORWARDER_ABI = [
   {
     type: 'function',
@@ -249,7 +249,7 @@ const CLEAR_MACRO_FORWARDER_ABI = [
       {
         name: 'security',
         type: 'tuple',
-        internalType: 'struct IClearMacroForwarder.Security',
+        internalType: 'struct IClearMacroForwarderV1.Security',
         components: [...SECURITY_ABI_COMPONENTS],
       },
     ],
@@ -380,25 +380,26 @@ const NULL_CONFIG: FlowSchedulerConfig = {
  * Async config: checks via RPC if the forwarders are deployed on the chain.
  * Forwarder addresses come from env (deterministic across chains); support is determined by on-chain check.
  * Macro address comes from chain-specific env (VITE_<chainId>_... or VITE_<SF_NAME>_...).
- * Permit2ClearMacroForwarder extends ClearMacroForwarder, so it can serve both roles.
+ * ClearMacroForwarderV1WithPermit2 extends ClearMacroForwarderV1, so it can serve both roles.
  */
 export async function getFlowSchedulerConfigAsync(chainId: number): Promise<FlowSchedulerConfig> {
-  const clearMacroAddr = getClearMacroForwarderAddress()
-  const permit2Addr = getPermit2ClearMacroForwarderAddress()
+  const clearMacroAddr = getClearMacroForwarderV1Address()
+  const permit2Addr = getClearMacroForwarderV1WithPermit2Address()
   if (!clearMacroAddr && !permit2Addr) {
     return { ...NULL_CONFIG, unsupportedReason: 'forwarder_not_configured' }
   }
-  const [clearMacroDeployed, permit2Deployed] = await Promise.all([
-    clearMacroAddr ? isContractDeployed(clearMacroAddr, chainId) : Promise.resolve(false),
-    permit2Addr ? isContractDeployed(permit2Addr, chainId) : Promise.resolve(false),
-  ])
-  if (!clearMacroDeployed && !permit2Deployed) {
+
+  const usingPermit2Superset = permit2Addr != null
+  const configuredForwarder = permit2Addr ?? clearMacroAddr
+  const forwarderDeployed = configuredForwarder ? await isContractDeployed(configuredForwarder, chainId) : false
+  if (!forwarderDeployed) {
     return { ...NULL_CONFIG, unsupportedReason: 'forwarder_not_deployed' }
   }
+
   const macroAddress = getFlowSchedulerMacroAddressFromEnv(chainId)
   return {
-    forwarderAddress: clearMacroDeployed ? clearMacroAddr! : permit2Deployed ? permit2Addr! : null,
-    permit2ForwarderAddress: permit2Deployed ? permit2Addr! : null,
+    forwarderAddress: configuredForwarder,
+    permit2ForwarderAddress: usingPermit2Superset ? permit2Addr! : null,
     macroAddress,
     ...(macroAddress == null && { unsupportedReason: 'macro_not_configured' as const }),
   }
@@ -423,7 +424,7 @@ export async function getStructHash(
 }
 
 /**
- * Fetches the Permit2 witness struct hash from the forwarder (Permit2ClearMacroForwarder).
+ * Fetches the Permit2 witness struct hash from the forwarder (ClearMacroForwarderV1WithPermit2).
  * Uses constant "ClearMacro" type name for deterministic ordering.
  */
 export async function getPermit2WitnessStructHash(
@@ -443,7 +444,7 @@ export async function getPermit2WitnessStructHash(
 }
 
 /**
- * Fetches the Permit2 witness type string from the forwarder (Permit2ClearMacroForwarder).
+ * Fetches the Permit2 witness type string from the forwarder (ClearMacroForwarderV1WithPermit2).
  * Uses constant "ClearMacro" for deterministic alphabetical ordering.
  */
 export async function getPermit2WitnessTypeString(

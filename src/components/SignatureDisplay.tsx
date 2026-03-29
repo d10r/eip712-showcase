@@ -13,7 +13,7 @@ const relayerUrl = (): string | null => {
   return typeof url === 'string' && url.trim() !== '' ? url.trim().replace(/\/$/, '') : null
 }
 
-// ClearMacroForwarder.runMacro (for FlowScheduler "Execute" via wallet)
+// ClearMacroForwarderV1.runMacro (for FlowScheduler "Execute" via wallet)
 const RUN_MACRO_ABI = [
   {
     type: 'function',
@@ -29,7 +29,7 @@ const RUN_MACRO_ABI = [
   },
 ] as const
 
-// Permit2ClearMacroForwarder.runPermit2AndMacro - Permit2 + macro execution
+// ClearMacroForwarderV1WithPermit2.runPermit2AndMacro - Permit2 + macro execution
 const RUN_PERMIT2_AND_MACRO_ABI = [
   {
     type: 'function',
@@ -39,7 +39,7 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
       {
         name: 'p',
         type: 'tuple',
-        internalType: 'struct Permit2ClearMacroForwarder.Permit2MacroParams',
+        internalType: 'struct ClearMacroForwarderV1WithPermit2.Permit2MacroParams',
         components: [
           {
             name: 'permit',
@@ -201,7 +201,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
 
   const canExecuteClearMacroOnly = canExecuteFlowScheduler && !hasPermit2
 
-  const permit2Forwarder = flowSchedulerConfig.permit2ForwarderAddress ?? flowSchedulerConfig.forwarderAddress
+  const permit2Forwarder = flowSchedulerConfig.permit2ForwarderAddress
   const canExecutePermit2AndMacro =
     hasPermit2 &&
     !!flowSchedulerResult?.permit2 &&

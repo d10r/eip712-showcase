@@ -72,7 +72,8 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
   const { config, isSupported, unsupportedReason, isLoading: isConfigLoading } =
     useFlowSchedulerConfig(chainId ?? undefined)
   const { forwarderAddress, permit2ForwarderAddress, macroAddress } = config
-  const effectiveForwarderForPermit2 = permit2ForwarderAddress ?? forwarderAddress
+  const effectiveForwarderForPermit2 = permit2ForwarderAddress
+  const canUsePermit2 = permit2ForwarderAddress != null
   const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null }
 
   const [superToken, setSuperToken] = useState('')
@@ -136,6 +137,12 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     setPermit2Spender((prev) => prev || effectiveForwarderForPermit2)
     setPermit2To((prev) => prev || effectiveForwarderForPermit2)
   }, [wrapInPermit2, effectiveForwarderForPermit2])
+
+  useEffect(() => {
+    if (!canUsePermit2) {
+      setWrapInPermit2(false)
+    }
+  }, [canUsePermit2])
 
   useEffect(() => {
     if (!wrapInPermit2 || !superToken || !isAddress(superToken)) return
@@ -231,7 +238,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
 
       if (wrapInPermit2) {
         if (!effectiveForwarderForPermit2) {
-          setError('Permit2ClearMacroForwarder is not deployed on this chain.')
+          setError('ClearMacroForwarderV1WithPermit2 is not deployed on this chain.')
           return
         }
         if (!permit2Config.permit2Address) {
@@ -383,11 +390,11 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     if (!isSupported) {
       const message =
         unsupportedReason === 'forwarder_not_deployed'
-          ? 'ClearMacroForwarder is not deployed on this chain.'
+          ? 'ClearMacroForwarderV1 is not deployed on this chain.'
           : unsupportedReason === 'macro_not_configured'
             ? 'FlowScheduler712Macro is not configured for this chain. Add VITE_<chainId>_FLOW_SCHEDULER_712_MACRO_ADDRESS or VITE_<network>_FLOW_SCHEDULER_712_MACRO_ADDRESS to .env (e.g. VITE_8453_... for Base).'
             : unsupportedReason === 'forwarder_not_configured'
-              ? 'Forwarder addresses not configured. Set VITE_CLEAR_MACRO_FORWARDER_ADDRESS and/or VITE_PERMIT2_CLEAR_MACRO_FORWARDER_ADDRESS.'
+              ? 'Forwarder addresses not configured. Set VITE_CLEAR_MACRO_FORWARDER_ADDRESS and/or VITE_CLEAR_MACRO_FORWARDER_WITH_PERMIT2_ADDRESS.'
               : 'FlowScheduler is not supported on this chain.'
       return (
         <div className="flow-scheduler-form">
@@ -506,25 +513,27 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
             onChange={(e) => setValidBefore(e.target.value)}
           />
         </div>
-        <div className="form-group">
-          <label>
-            <input
-              type="checkbox"
-              checked={wrapInPermit2}
-              onChange={(e) => setWrapInPermit2(e.target.checked)}
-              aria-describedby="permit2-desc"
-            />
-            {' '}Wrap action in Permit2
-          </label>
-          <p id="permit2-desc" className="form-hint">
-            Sign the action as a Permit2 witness for token transfer + macro execution.
-          </p>
-        </div>
+        {canUsePermit2 && (
+          <div className="form-group">
+            <label>
+              <input
+                type="checkbox"
+                checked={wrapInPermit2}
+                onChange={(e) => setWrapInPermit2(e.target.checked)}
+                aria-describedby="permit2-desc"
+              />
+              {' '}Wrap action in Permit2
+            </label>
+            <p id="permit2-desc" className="form-hint">
+              Sign the action as a Permit2 witness for token transfer + macro execution.
+            </p>
+          </div>
+        )}
         {wrapInPermit2 && (
           <>
             {effectiveForwarderForPermit2 && (
               <div className="flow-scheduler-debug">
-                <small>Permit2MacroForwarder: {effectiveForwarderForPermit2}</small>
+                <small>ClearMacroForwarderV1WithPermit2: {effectiveForwarderForPermit2}</small>
               </div>
             )}
             <div className="form-group">
@@ -557,7 +566,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
                 onChange={(e) => setPermit2Spender(e.target.value)}
                 placeholder="0x..."
               />
-              <p className="form-hint">Defaults to Permit2MacroForwarder (required for Execute).</p>
+              <p className="form-hint">Defaults to ClearMacroForwarderV1WithPermit2 (required for Execute).</p>
             </div>
             <div className="form-group">
               <label htmlFor="permit2-to">Transfer to (recipient):</label>
@@ -568,7 +577,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
                 onChange={(e) => setPermit2To(e.target.value)}
                 placeholder="0x..."
               />
-              <p className="form-hint">Defaults to Permit2MacroForwarder (tokens go to forwarder for upgrade).</p>
+              <p className="form-hint">Defaults to ClearMacroForwarderV1WithPermit2 (tokens go to forwarder for upgrade).</p>
             </div>
             <div className="form-group">
               <label htmlFor="permit2-requested">Requested amount (tokens):</label>
