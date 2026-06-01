@@ -1,31 +1,33 @@
 import { useQuery } from '@tanstack/react-query'
 import {
-  getFlowSchedulerConfigAsync,
-  type FlowSchedulerConfig,
-  type FlowSchedulerUnsupportedReason,
+  getFlowSchedulerClearMacroConfigAsync,
+  type FlowSchedulerClearMacroConfig,
+  type FlowSchedulerClearMacroUnsupportedReason,
 } from '../utils/flowScheduler'
 
-export function useFlowSchedulerConfig(chainId: number | undefined): {
-  config: FlowSchedulerConfig
+export function useFlowSchedulerClearMacroConfig(chainId: number | undefined): {
+  config: FlowSchedulerClearMacroConfig
   isSupported: boolean
-  unsupportedReason: FlowSchedulerUnsupportedReason | undefined
+  unsupportedReason: FlowSchedulerClearMacroUnsupportedReason | undefined
   isLoading: boolean
 } {
   const { data, isLoading: isLoadingConfig } = useQuery({
-    queryKey: ['flowSchedulerConfig', chainId],
-    queryFn: () => getFlowSchedulerConfigAsync(chainId!),
+    queryKey: ['flowSchedulerClearMacroConfig', chainId],
+    queryFn: () => getFlowSchedulerClearMacroConfigAsync(chainId!),
     enabled: chainId != null,
   })
 
   const config = data ?? {
-    forwarderAddress: null,
-    permit2ForwarderAddress: null,
-    macroAddress: null,
+    clearMacroForwarderAddress: null,
+    clearMacroForwarderWithPermit2Address: null,
+    flowSchedulerClearMacroAddress: null,
   }
 
   return {
     config,
-    isSupported: config.forwarderAddress != null && config.macroAddress != null,
+    isSupported:
+      config.clearMacroForwarderAddress != null &&
+      config.flowSchedulerClearMacroAddress != null,
     unsupportedReason: config.unsupportedReason,
     isLoading: chainId != null && isLoadingConfig,
   }

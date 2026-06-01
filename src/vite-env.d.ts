@@ -2,14 +2,16 @@
 
 interface ImportMetaEnv {
   readonly VITE_WALLET_CONNECT_PROJECT_ID: string;
-  /** ClearMacroForwarderV1 address (deterministic, same across chains). */
+  /** ClearMacro forwarder address (deterministic, same across chains). */
   readonly VITE_CLEAR_MACRO_FORWARDER_ADDRESS?: string;
-  /** ClearMacroForwarderV1WithPermit2 address (deterministic, same across chains). */
+  /** ClearMacro forwarder with Permit2 extension (deterministic, same across chains). */
   readonly VITE_CLEAR_MACRO_FORWARDER_WITH_PERMIT2_ADDRESS?: string;
-  /** FlowScheduler712Macro per chain: VITE_<chainId>_... or VITE_<UPPERCASE_NAME>_... e.g. VITE_BASE_MAINNET_..., VITE_8453_... */
-  readonly VITE_OPTIMISM_SEPOLIA_FLOW_SCHEDULER_712_MACRO_ADDRESS?: string;
-  readonly VITE_BASE_MAINNET_FLOW_SCHEDULER_712_MACRO_ADDRESS?: string;
-  readonly VITE_RELAYER_URL?: string;
+  /** FlowScheduler ClearMacro per chain: VITE_<chainId>_... or VITE_<UPPERCASE_NAME>_... */
+  readonly VITE_OPTIMISM_SEPOLIA_FLOW_SCHEDULER_CLEAR_MACRO_ADDRESS?: string;
+  readonly VITE_BASE_MAINNET_FLOW_SCHEDULER_CLEAR_MACRO_ADDRESS?: string;
+  /** ClearMacro Provider base URL for relay execution. */
+  readonly VITE_CLEARMACRO_PROVIDER_URL?: string;
+  readonly VITE_PERMIT2_ADDRESS?: string;
 }
 
 interface ImportMeta {

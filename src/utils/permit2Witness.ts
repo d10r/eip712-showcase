@@ -1,4 +1,4 @@
-import type { Address, Hex } from 'viem'
+import type { Address } from 'viem'
 
 /** Canonical Permit2 address (same on most mainnets) */
 export const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address
@@ -13,11 +13,9 @@ export const TOKEN_PERMISSIONS_TYPE = [
 ]
 
 export interface Permit2WitnessTypedDataParams {
-  /** Struct hash of the ClearMacro payload (witness) - used when calling the contract */
-  witnessStructHash: Hex
-  /** Full witness message object for EIP-712 signing (e.g. ScheduleFlow message) */
+  /** Full witness message object for EIP-712 signing (ClearMacro with nested Action and Security). */
   witnessMessage: Record<string, unknown>
-  /** Primary type name of the witness (e.g. "ScheduleFlow") */
+  /** Primary type name of the witness — always `ClearMacro` for IClearMacroPermit2Extension. */
   witnessPrimaryType: string
   /** Full EIP-712 types for the witness and its dependencies */
   witnessTypes: Record<string, readonly { name: string; type: string }[]>
@@ -52,6 +50,8 @@ export interface PermitWitnessTransferFromTypedData {
 /**
  * Builds EIP-712 typed data for Permit2's PermitWitnessTransferFrom with a ClearMacro witness.
  * The witness is embedded as the full struct (for signing); the contract receives witnessStructHash.
+ * For ClearMacro + Permit2, use witnessPrimaryType `ClearMacro` and witness fields
+ * `(address upgradeSuperToken, Action action, Security security)`.
  */
 export function buildPermit2WitnessTypedData(
   params: Permit2WitnessTypedDataParams

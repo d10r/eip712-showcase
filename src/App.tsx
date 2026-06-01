@@ -4,7 +4,7 @@ import PermitForm from './components/PermitForm'
 import FlowSchedulerForm from './components/FlowSchedulerForm'
 import SignatureDisplay from './components/SignatureDisplay'
 import { PermitParameters, TokenMetadata } from './utils/permit'
-import type { FlowSchedulerSignatureResult } from './components/FlowSchedulerForm'
+import type { FlowSchedulerClearMacroSignatureResult } from './components/FlowSchedulerForm'
 import './App.css'
 
 type Tab = 'permit' | 'flowScheduler'
@@ -42,7 +42,8 @@ function App() {
   const [signature, setSignature] = useState<string | null>(null)
   const [permitParams, setPermitParams] = useState<PermitParameters | null>(null)
   const [tokenMetadata, setTokenMetadata] = useState<TokenMetadata | null>(null)
-  const [flowSchedulerResult, setFlowSchedulerResult] = useState<FlowSchedulerSignatureResult | null>(null)
+  const [flowSchedulerClearMacroResult, setFlowSchedulerClearMacroResult] =
+    useState<FlowSchedulerClearMacroSignatureResult | null>(null)
 
   const handlePermitSignatureGenerated = (
     sig: string,
@@ -52,11 +53,13 @@ function App() {
     setSignature(sig)
     setPermitParams(params)
     setTokenMetadata(metadata)
-    setFlowSchedulerResult(null)
+    setFlowSchedulerClearMacroResult(null)
   }
 
-  const handleFlowSchedulerSignatureGenerated = (result: FlowSchedulerSignatureResult) => {
-    setFlowSchedulerResult(result)
+  const handleFlowSchedulerClearMacroSignatureGenerated = (
+    result: FlowSchedulerClearMacroSignatureResult
+  ) => {
+    setFlowSchedulerClearMacroResult(result)
     setSignature(null)
     setPermitParams(null)
     setTokenMetadata(null)
@@ -85,7 +88,7 @@ function App() {
             className={`tab ${activeTab === 'flowScheduler' ? 'active' : ''}`}
             onClick={() => selectTab('flowScheduler')}
           >
-            FlowScheduler
+            FlowScheduler ClearMacro
           </button>
         </nav>
 
@@ -104,11 +107,11 @@ function App() {
 
         {activeTab === 'flowScheduler' && (
           <>
-            <FlowSchedulerForm onSignatureGenerated={handleFlowSchedulerSignatureGenerated} />
-            {flowSchedulerResult && (
+            <FlowSchedulerForm onSignatureGenerated={handleFlowSchedulerClearMacroSignatureGenerated} />
+            {flowSchedulerClearMacroResult && (
               <SignatureDisplay
-                signature={flowSchedulerResult.signature}
-                flowSchedulerResult={flowSchedulerResult}
+                signature={flowSchedulerClearMacroResult.signature}
+                flowSchedulerClearMacroResult={flowSchedulerClearMacroResult}
               />
             )}
           </>
@@ -117,7 +120,7 @@ function App() {
 
       <footer>
         <p>
-          This application demonstrates EIP-712 signing (ERC20 permit and FlowScheduler).
+          This application demonstrates EIP-712 signing (ERC20 permit and FlowScheduler ClearMacro).
         </p>
       </footer>
     </div>

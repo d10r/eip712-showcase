@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import { useAccount, useSignTypedData, useChainId } from 'wagmi'
-import { useFlowSchedulerConfig } from '../hooks/useFlowSchedulerConfig'
+import { useFlowSchedulerClearMacroConfig } from '../hooks/useFlowSchedulerConfig'
 import {
-  getDescriptionAndParamsFromMacro,
-  getRunMacroParams,
-  getNextNonce,
-  buildScheduleFlowTypedData,
-  getPermit2WitnessStructHash,
-  getPermit2WitnessTypeString,
-  getTypeDefinition,
+  encodeFlowSchedulerActionParams,
+  encodeClearMacroPayload,
+  getFlowSchedulerNextNonce,
+  buildFlowSchedulerClearMacroTypedData,
+  getClearMacroPermit2WitnessStructHash,
+  getClearMacroPermit2WitnessTypeString,
   getUnderlyingToken,
   getTokenDecimals,
-  SECURITY_DOMAIN,
-  SECURITY_PROVIDER,
-  type ScheduleFlowParams,
-  type ScheduleFlowSecurity,
+  FLOW_SCHEDULER_SECURITY_DOMAIN,
+  FLOW_SCHEDULER_SECURITY_PROVIDER,
+  type FlowSchedulerActionParams,
+  type ClearMacroSecurity,
 } from '../utils/flowScheduler'
 import {
   buildPermit2WitnessTypedData,
@@ -31,38 +30,35 @@ function defaultEndDate(): number {
   return Math.floor(Date.now() / 1000) + 604800
 }
 
-/** Default Permit2 deadline: 1 hour from now */
 function defaultPermit2Deadline(): bigint {
   return BigInt(Math.floor(Date.now() / 1000) + 3600)
 }
 
-/** Permit2 nonce: timestamp-based for uniqueness (Permit2 uses nonceBitmap) */
 function defaultPermit2Nonce(): bigint {
   return BigInt(Date.now())
 }
 
-export interface Permit2Data {
+export interface Permit2ContextData {
   typedData: PermitWitnessTransferFromTypedData
   permit: { token: Address; amount: bigint; nonce: bigint; deadline: bigint }
-  transferDetails: { to: Address; requestedAmount: bigint }
   spender: Address
   witnessStructHash: Hex
   witnessTypeString: string
 }
 
-export interface FlowSchedulerSignatureResult {
+export interface FlowSchedulerClearMacroSignatureResult {
   signature: string
-  /** Full payload for runMacro, from forwarder.encodeParams(actionParams, security). */
-  params: Hex
-  /** Decoded schedule fields (inputs to the macro). */
-  scheduleParams: ScheduleFlowParams
-  security: ScheduleFlowSecurity
-  /** When set, signature is over Permit2 PermitWitnessTransferFrom; otherwise over ClearMacro ScheduleFlow. */
-  permit2?: Permit2Data
+  /** ABI-encoded `IClearMacroForwarderV1.Payload` from `encodeParams`. */
+  encodedPayload: Hex
+  actionParams: Hex
+  action: FlowSchedulerActionParams
+  security: ClearMacroSecurity
+  /** When set, signature is over Permit2 `PermitWitnessTransferFrom` with a `ClearMacro` witness. */
+  permit2Context?: Permit2ContextData
 }
 
 interface FlowSchedulerFormProps {
-  onSignatureGenerated: (result: FlowSchedulerSignatureResult) => void
+  onSignatureGenerated: (result: FlowSchedulerClearMacroSignatureResult) => void
 }
 
 const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenerated }) => {
@@ -70,10 +66,13 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
   const chainId = useChainId()
   const { signTypedDataAsync } = useSignTypedData()
   const { config, isSupported, unsupportedReason, isLoading: isConfigLoading } =
-    useFlowSchedulerConfig(chainId ?? undefined)
-  const { forwarderAddress, permit2ForwarderAddress, macroAddress } = config
-  const effectiveForwarderForPermit2 = permit2ForwarderAddress
-  const canUsePermit2 = permit2ForwarderAddress != null
+    useFlowSchedulerClearMacroConfig(chainId ?? undefined)
+  const {
+    clearMacroForwarderAddress,
+    clearMacroForwarderWithPermit2Address,
+    flowSchedulerClearMacroAddress,
+  } = config
+  const canUsePermit2 = clearMacroForwarderWithPermit2Address != null
   const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null }
 
   const [superToken, setSuperToken] = useState('')
@@ -91,8 +90,6 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
   const [permit2Token, setPermit2Token] = useState('')
   const [permit2Amount, setPermit2Amount] = useState('1')
   const [permit2Spender, setPermit2Spender] = useState('')
-  const [permit2To, setPermit2To] = useState('')
-  const [permit2RequestedAmount, setPermit2RequestedAmount] = useState('1')
 
   const [nonce, setNonce] = useState<bigint | null>(null)
   const [isLoadingNonce, setIsLoadingNonce] = useState(false)
@@ -100,24 +97,18 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!forwarderAddress || !address || chainId == null) {
+    if (!clearMacroForwarderAddress || !address || chainId == null) {
       setNonce(null)
       return
     }
     let cancelled = false
     setIsLoadingNonce(true)
-    getNextNonce(forwarderAddress, address, chainId)
+    getFlowSchedulerNextNonce(clearMacroForwarderAddress, address, chainId)
       .then((n) => {
-        if (!cancelled) {
-          setNonce(n)
-          console.log('[FlowScheduler] next nonce:', n.toString())
-        }
+        if (!cancelled) setNonce(n)
       })
-      .catch((err) => {
-        if (!cancelled) {
-          setNonce(null)
-          console.error('[FlowScheduler] getNextNonce failed:', err)
-        }
+      .catch(() => {
+        if (!cancelled) setNonce(null)
       })
       .finally(() => {
         if (!cancelled) setIsLoadingNonce(false)
@@ -125,7 +116,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     return () => {
       cancelled = true
     }
-  }, [forwarderAddress, address, chainId])
+  }, [clearMacroForwarderAddress, address, chainId])
 
   useEffect(() => {
     setStartDate((s) => s || String(defaultStartDate()))
@@ -133,15 +124,12 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
   }, [])
 
   useEffect(() => {
-    if (!wrapInPermit2 || !effectiveForwarderForPermit2) return
-    setPermit2Spender((prev) => prev || effectiveForwarderForPermit2)
-    setPermit2To((prev) => prev || effectiveForwarderForPermit2)
-  }, [wrapInPermit2, effectiveForwarderForPermit2])
+    if (!wrapInPermit2 || !clearMacroForwarderWithPermit2Address) return
+    setPermit2Spender((prev) => prev || clearMacroForwarderWithPermit2Address)
+  }, [wrapInPermit2, clearMacroForwarderWithPermit2Address])
 
   useEffect(() => {
-    if (!canUsePermit2) {
-      setWrapInPermit2(false)
-    }
+    if (!canUsePermit2) setWrapInPermit2(false)
   }, [canUsePermit2])
 
   useEffect(() => {
@@ -152,7 +140,9 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
         if (!cancelled && underlying) setPermit2Token(underlying)
       })
       .catch(() => {})
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [wrapInPermit2, superToken])
 
   const handleSign = async (e: React.FormEvent) => {
@@ -161,7 +151,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
       setError('Wallet not connected or chain not selected')
       return
     }
-    if (!forwarderAddress || !macroAddress) {
+    if (!clearMacroForwarderAddress || !flowSchedulerClearMacroAddress) {
       setError('Contract addresses are not configured for the connected chain.')
       return
     }
@@ -190,7 +180,7 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
       if (!userDataHex.startsWith('0x')) userDataHex = '0x' + userDataHex
       if (userDataHex === '0x') userDataHex = '0x' as `0x${string}`
 
-      const scheduleParams: ScheduleFlowParams = {
+      const action: FlowSchedulerActionParams = {
         superToken: superToken as `0x${string}`,
         receiver: receiver as `0x${string}`,
         startDate: startDateNum,
@@ -200,44 +190,45 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
         endDate: endDateNum,
         userData: userDataHex as `0x${string}`,
       }
-      const security: ScheduleFlowSecurity = {
-        domain: SECURITY_DOMAIN,
-        provider: SECURITY_PROVIDER,
+      const security: ClearMacroSecurity = {
+        domain: FLOW_SCHEDULER_SECURITY_DOMAIN,
+        macroContract: flowSchedulerClearMacroAddress,
+        provider: FLOW_SCHEDULER_SECURITY_PROVIDER,
         validAfter: BigInt(validAfter),
         validBefore: BigInt(validBefore),
         nonce,
       }
 
-      console.log('[FlowScheduler] sign inputs: chainId', chainId, 'forwarder', forwarderAddress, 'macro', macroAddress)
-      console.log('[FlowScheduler] scheduleParams:', scheduleParams)
-      console.log('[FlowScheduler] security:', security)
-
       let description: string
       let actionParams: Hex
       try {
-        const result = await getDescriptionAndParamsFromMacro(macroAddress, scheduleParams)
+        const result = await encodeFlowSchedulerActionParams(flowSchedulerClearMacroAddress, action)
         description = result.description
         actionParams = result.actionParams
       } catch (err) {
-        console.warn('Macro fetch failed:', err)
-        setError('Failed to fetch description and params from macro. Check your RPC and macro address.')
+        console.warn('ClearMacro encode failed:', err)
+        setError('Failed to encode action params from macro. Check your RPC and macro address.')
         return
       }
-      console.log('[FlowScheduler] description (for EIP-712 message):', description)
 
-      const params = await getRunMacroParams(forwarderAddress, actionParams, security)
-      console.log('[FlowScheduler] params (from forwarder.encodeParams):', params.length, 'chars')
+      const encodedPayload = await encodeClearMacroPayload(
+        clearMacroForwarderAddress,
+        actionParams,
+        security
+      )
 
-      const typedData = buildScheduleFlowTypedData(
-        scheduleParams,
+      const typedData = await buildFlowSchedulerClearMacroTypedData(
+        action,
         security,
         description,
+        encodedPayload,
+        flowSchedulerClearMacroAddress,
         chainId,
-        forwarderAddress
+        clearMacroForwarderAddress
       )
 
       if (wrapInPermit2) {
-        if (!effectiveForwarderForPermit2) {
+        if (!clearMacroForwarderWithPermit2Address) {
           setError('ClearMacroForwarderV1WithPermit2 is not deployed on this chain.')
           return
         }
@@ -253,19 +244,13 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
           setError('Invalid Permit2 spender address.')
           return
         }
-        if (!permit2To || !isAddress(permit2To)) {
-          setError('Invalid Permit2 transfer recipient (to).')
-          return
-        }
         const amountFloat = parseFloat(permit2Amount || '0')
-        const requestedFloat = parseFloat(permit2RequestedAmount || permit2Amount || '0')
         if (isNaN(amountFloat) || amountFloat <= 0) {
           setError('Permit2 amount must be a positive number (in whole tokens).')
           return
         }
         const decimals = await getTokenDecimals(permit2Token as Address)
         const amountBig = BigInt(Math.round(amountFloat * 10 ** decimals))
-        const requestedAmountBig = BigInt(Math.round(requestedFloat * 10 ** decimals))
         if (amountBig <= 0n) {
           setError('Permit2 amount must be positive.')
           return
@@ -273,28 +258,36 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
 
         const permit2Nonce = defaultPermit2Nonce()
         const permit2Deadline = defaultPermit2Deadline()
+        const upgradeSuperToken = action.superToken as Address
 
-        console.log('[FlowScheduler] Permit2 flow: effectiveForwarderForPermit2:', effectiveForwarderForPermit2, 'permit2Spender:', permit2Spender, 'permit2To:', permit2To)
-        console.log('[FlowScheduler] Permit2 flow: permit2Token:', permit2Token, 'amountBig:', amountBig.toString(), 'nonce:', permit2Nonce.toString(), 'deadline:', permit2Deadline.toString())
-        console.log('[FlowScheduler] Permit2 flow: permit2Address:', permit2Config.permit2Address, 'chainId:', chainId)
-
-        const [witnessStructHash, witnessTypeString, typeDefinition] = await Promise.all([
-          getPermit2WitnessStructHash(effectiveForwarderForPermit2!, macroAddress, params),
-          getPermit2WitnessTypeString(effectiveForwarderForPermit2!, macroAddress, params),
-          getTypeDefinition(effectiveForwarderForPermit2!, macroAddress, params),
+        const [witnessStructHash, witnessTypeString] = await Promise.all([
+          getClearMacroPermit2WitnessStructHash(
+            clearMacroForwarderWithPermit2Address,
+            flowSchedulerClearMacroAddress,
+            encodedPayload,
+            upgradeSuperToken
+          ),
+          getClearMacroPermit2WitnessTypeString(
+            clearMacroForwarderWithPermit2Address,
+            flowSchedulerClearMacroAddress,
+            encodedPayload
+          ),
         ])
 
-        console.log('[FlowScheduler] Permit2 flow: typeDefinition from forwarder:', typeDefinition)
-        console.log('[FlowScheduler] Permit2 flow: client Action type must match FlowScheduler712Macro: Action(string description,address superToken,address receiver,uint32 startDate,uint32 startMaxDelay,int96 flowRate,uint256 startAmount,uint32 endDate,bytes userData)')
-        console.log('[FlowScheduler] Permit2 flow: witnessStructHash (contract):', witnessStructHash)
-        console.log('[FlowScheduler] Permit2 flow: witnessTypeString (contract) full length:', witnessTypeString.length)
-
+        const clearMacroWitnessMessage = {
+          upgradeSuperToken,
+          action: typedData.message.action,
+          security: typedData.message.security,
+        }
         const permit2TypedData = buildPermit2WitnessTypedData({
-          witnessStructHash: witnessStructHash as Hex,
-          witnessMessage: typedData.message,
+          witnessMessage: clearMacroWitnessMessage,
           witnessPrimaryType: 'ClearMacro',
           witnessTypes: {
-            ClearMacro: typedData.types.ScheduleFlow,
+            ClearMacro: [
+              { name: 'upgradeSuperToken', type: 'address' },
+              { name: 'action', type: 'Action' },
+              { name: 'security', type: 'Security' },
+            ],
             Action: typedData.types.Action,
             Security: typedData.types.Security,
           },
@@ -308,17 +301,6 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
           chainId,
         })
 
-        console.log('[FlowScheduler] Permit2 message (what user signs):', JSON.stringify(permit2TypedData.message, (_, v) => (typeof v === 'bigint' ? v.toString() : v)))
-        console.log('[FlowScheduler] Permit2 domain:', permit2TypedData.domain)
-        const permit2Digest = hashTypedData({
-          domain: permit2TypedData.domain,
-          types: permit2TypedData.types,
-          primaryType: 'PermitWitnessTransferFrom',
-          message: permit2TypedData.message,
-        })
-        console.log('[FlowScheduler] Permit2 EIP-712 digest (before signing):', permit2Digest)
-        console.log('[FlowScheduler] signing Permit2 PermitWitnessTransferFrom with ScheduleFlow witness')
-
         const signature = await signTypedDataAsync({
           domain: permit2TypedData.domain,
           types: permit2TypedData.types,
@@ -326,24 +308,19 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
           message: permit2TypedData.message,
         })
 
-        console.log('[FlowScheduler] Permit2 signature received:', signature, 'length:', signature.length)
-
         onSignatureGenerated({
           signature,
-          params,
-          scheduleParams,
+          encodedPayload,
+          actionParams,
+          action,
           security,
-          permit2: {
+          permit2Context: {
             typedData: permit2TypedData,
             permit: {
               token: permit2Token as Address,
               amount: amountBig,
               nonce: permit2Nonce,
               deadline: permit2Deadline,
-            },
-            transferDetails: {
-              to: permit2To as Address,
-              requestedAmount: requestedAmountBig,
             },
             spender: permit2Spender as Address,
             witnessStructHash: witnessStructHash as Hex,
@@ -354,24 +331,22 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
         const digest = hashTypedData({
           domain: typedData.domain,
           types: typedData.types,
-          primaryType: 'ScheduleFlow',
+          primaryType: typedData.primaryType,
           message: typedData.message,
         })
-        console.log('[FlowScheduler] EIP-712 digest (being signed):', digest)
+        console.log('[FlowScheduler] ClearMacro EIP-712 digest:', digest)
 
         const signature = await signTypedDataAsync({
           domain: typedData.domain,
           types: typedData.types,
-          primaryType: 'ScheduleFlow',
+          primaryType: typedData.primaryType,
           message: typedData.message,
         })
 
-        console.log('[FlowScheduler] signature received:', signature)
-
-        onSignatureGenerated({ signature, params, scheduleParams, security })
+        onSignatureGenerated({ signature, encodedPayload, actionParams, action, security })
       }
     } catch (err) {
-      console.error('[FlowScheduler] signature/flow error:', err)
+      console.error('[FlowScheduler] signature error:', err)
       setError(err instanceof Error ? err.message : 'An unknown error occurred')
     } finally {
       setIsLoading(false)
@@ -382,23 +357,23 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
     if (isConfigLoading) {
       return (
         <div className="flow-scheduler-form">
-          <h2>FlowScheduler</h2>
-          <p className="info-message">Checking if this chain supports macro forwarders…</p>
+          <h2>FlowScheduler ClearMacro</h2>
+          <p className="info-message">Checking ClearMacro forwarder deployment…</p>
         </div>
       )
     }
     if (!isSupported) {
       const message =
-        unsupportedReason === 'forwarder_not_deployed'
+        unsupportedReason === 'clear_macro_forwarder_not_deployed'
           ? 'ClearMacroForwarderV1 is not deployed on this chain.'
-          : unsupportedReason === 'macro_not_configured'
-            ? 'FlowScheduler712Macro is not configured for this chain. Add VITE_<chainId>_FLOW_SCHEDULER_712_MACRO_ADDRESS or VITE_<network>_FLOW_SCHEDULER_712_MACRO_ADDRESS to .env (e.g. VITE_8453_... for Base).'
-            : unsupportedReason === 'forwarder_not_configured'
+          : unsupportedReason === 'flow_scheduler_clear_macro_not_configured'
+            ? 'FlowScheduler ClearMacro is not configured for this chain. Add VITE_<chainId>_FLOW_SCHEDULER_CLEAR_MACRO_ADDRESS or VITE_<network>_FLOW_SCHEDULER_CLEAR_MACRO_ADDRESS to .env.'
+            : unsupportedReason === 'clear_macro_forwarder_not_configured'
               ? 'Forwarder addresses not configured. Set VITE_CLEAR_MACRO_FORWARDER_ADDRESS and/or VITE_CLEAR_MACRO_FORWARDER_WITH_PERMIT2_ADDRESS.'
-              : 'FlowScheduler is not supported on this chain.'
+              : 'FlowScheduler ClearMacro is not supported on this chain.'
       return (
         <div className="flow-scheduler-form">
-          <h2>FlowScheduler</h2>
+          <h2>FlowScheduler ClearMacro</h2>
           <p className="info-message">{message}</p>
         </div>
       )
@@ -407,11 +382,15 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
 
   return (
     <div className="flow-scheduler-form">
-      <h2>FlowScheduler</h2>
-      {(forwarderAddress != null || macroAddress != null) && (
+      <h2>FlowScheduler ClearMacro</h2>
+      {(clearMacroForwarderAddress != null || flowSchedulerClearMacroAddress != null) && (
         <div className="flow-scheduler-debug">
-          {forwarderAddress != null && <small>Forwarder: {forwarderAddress}</small>}
-          {macroAddress != null && <small>Macro: {macroAddress}</small>}
+          {clearMacroForwarderAddress != null && (
+            <small>ClearMacroForwarderV1: {clearMacroForwarderAddress}</small>
+          )}
+          {flowSchedulerClearMacroAddress != null && (
+            <small>FlowScheduler ClearMacro: {flowSchedulerClearMacroAddress}</small>
+          )}
         </div>
       )}
       <form onSubmit={handleSign}>
@@ -522,18 +501,18 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
                 onChange={(e) => setWrapInPermit2(e.target.checked)}
                 aria-describedby="permit2-desc"
               />
-              {' '}Wrap action in Permit2
+              {' '}Wrap in Permit2 (ClearMacro witness)
             </label>
             <p id="permit2-desc" className="form-hint">
-              Sign the action as a Permit2 witness for token transfer + macro execution.
+              Sign Permit2 PermitWitnessTransferFrom with a ClearMacro witness for transfer + macro execution.
             </p>
           </div>
         )}
         {wrapInPermit2 && (
           <>
-            {effectiveForwarderForPermit2 && (
+            {clearMacroForwarderWithPermit2Address && (
               <div className="flow-scheduler-debug">
-                <small>ClearMacroForwarderV1WithPermit2: {effectiveForwarderForPermit2}</small>
+                <small>ClearMacroForwarderV1WithPermit2: {clearMacroForwarderWithPermit2Address}</small>
               </div>
             )}
             <div className="form-group">
@@ -566,35 +545,16 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
                 onChange={(e) => setPermit2Spender(e.target.value)}
                 placeholder="0x..."
               />
-              <p className="form-hint">Defaults to ClearMacroForwarderV1WithPermit2 (required for Execute).</p>
-            </div>
-            <div className="form-group">
-              <label htmlFor="permit2-to">Transfer to (recipient):</label>
-              <input
-                id="permit2-to"
-                type="text"
-                value={permit2To}
-                onChange={(e) => setPermit2To(e.target.value)}
-                placeholder="0x..."
-              />
-              <p className="form-hint">Defaults to ClearMacroForwarderV1WithPermit2 (tokens go to forwarder for upgrade).</p>
-            </div>
-            <div className="form-group">
-              <label htmlFor="permit2-requested">Requested amount (tokens):</label>
-              <input
-                id="permit2-requested"
-                type="text"
-                value={permit2RequestedAmount}
-                onChange={(e) => setPermit2RequestedAmount(e.target.value)}
-                placeholder="1"
-              />
+              <p className="form-hint">
+                Defaults to ClearMacroForwarderV1WithPermit2 (required for implied upgrade mode).
+              </p>
             </div>
           </>
         )}
         {isLoadingNonce && <div className="info-message">Fetching nonce...</div>}
         {nonce != null && (
           <div className="info-message">
-            <small>Nonce (FlowSchedulerMacro key): {nonce.toString()}</small>
+            <small>ClearMacro nonce (key 0): {nonce.toString()}</small>
           </div>
         )}
         <button
@@ -603,11 +563,11 @@ const FlowSchedulerForm: React.FC<FlowSchedulerFormProps> = ({ onSignatureGenera
             isLoading ||
             !address ||
             nonce == null ||
-            (wrapInPermit2 && (!permit2Token || !permit2Spender || !permit2To || !permit2Amount))
+            (wrapInPermit2 && (!permit2Token || !permit2Spender || !permit2Amount))
           }
           className="button"
         >
-          {isLoading ? 'Signing...' : wrapInPermit2 ? 'Sign Permit2 + ScheduleFlow' : 'Sign ScheduleFlow'}
+          {isLoading ? 'Signing...' : wrapInPermit2 ? 'Sign Permit2 + ClearMacro' : 'Sign ClearMacro'}
         </button>
       </form>
       {error && <div className="error">{error}</div>}

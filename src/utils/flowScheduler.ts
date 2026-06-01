@@ -1,57 +1,45 @@
 import { readContract } from 'wagmi/actions'
 import { type Address, type Hex } from 'viem'
-import { createPublicClient, http } from 'viem'
 import { config } from '../wagmi'
 import sfMetadata from '@superfluid-finance/metadata'
+import {
+  CLEARMACRO_EIP712_DOMAIN_NAME,
+  CLEARMACRO_EIP712_DOMAIN_VERSION,
+  type ClearMacroSecurity,
+  encodeClearMacroPayload,
+  getClearMacroForwarderConfigAsync,
+  getClearMacroNonce,
+  getClearMacroPermit2WitnessStructHash,
+  getClearMacroPermit2WitnessTypeString,
+  getClearMacroPrimaryTypeName,
+  getClearMacroStructHash,
+  getClearMacroTypeDefinition,
+  type ClearMacroForwarderConfig,
+  type ClearMacroUnsupportedReason,
+} from './clearMacro'
 
-const addr = (a: string) => (/^0x[a-fA-F0-9]{40}$/.test(a) ? (a as Address) : null)
-
-/** ClearMacroForwarderV1 address from env (deterministic, same across chains where deployed) */
-function getClearMacroForwarderV1Address(): Address | null {
-  return addr((import.meta.env.VITE_CLEAR_MACRO_FORWARDER_ADDRESS as string) ?? '') ?? null
+export {
+  CLEARMACRO_EIP712_DOMAIN_NAME,
+  CLEARMACRO_EIP712_DOMAIN_VERSION,
+  encodeClearMacroPayload,
+  getClearMacroStructHash,
+  getClearMacroPermit2WitnessStructHash,
+  getClearMacroPermit2WitnessTypeString,
+  getClearMacroTypeDefinition,
+  type ClearMacroSecurity,
+  type ClearMacroForwarderConfig,
+  type ClearMacroUnsupportedReason,
 }
 
-/** ClearMacroForwarderV1WithPermit2 address from env (deterministic, same across chains where deployed) */
-function getClearMacroForwarderV1WithPermit2Address(): Address | null {
-  return addr((import.meta.env.VITE_CLEAR_MACRO_FORWARDER_WITH_PERMIT2_ADDRESS as string) ?? '') ?? null
+export const FLOW_SCHEDULER_SECURITY_DOMAIN = 'flowscheduler.xyz'
+export const FLOW_SCHEDULER_SECURITY_PROVIDER = 'macros.superfluid.eth'
+
+/** Nonce key for FlowScheduler ClearMacro payloads (uint192). */
+export function flowSchedulerClearMacroNonceKey(): bigint {
+  return 0n
 }
 
-/** Resolve FlowScheduler712Macro address from env using chainId or SF metadata canonical name */
-function getFlowSchedulerMacroAddressFromEnv(chainId: number): Address | null {
-  const metadata = sfMetadata as {
-    getNetworkByChainId?: (chainId: number) => { uppercaseName?: string } | undefined
-    networks?: { chainId: number; uppercaseName?: string }[]
-  }
-  const network = metadata.getNetworkByChainId?.(chainId) ?? metadata.networks?.find((n) => n.chainId === chainId)
-  const env = import.meta.env as Record<string, string | undefined>
-  const tryKey = (key: string) => addr(env[key] ?? '') ?? null
-  const keysToTry = [
-    `VITE_${chainId}_FLOW_SCHEDULER_712_MACRO_ADDRESS`,
-    ...(network?.uppercaseName ? [`VITE_${network.uppercaseName}_FLOW_SCHEDULER_712_MACRO_ADDRESS`] : []),
-  ]
-  for (const key of keysToTry) {
-    const a = tryKey(key)
-    if (a) return a
-  }
-  return null
-}
-
-const SECURITY_DOMAIN = 'flowscheduler.xyz'
-const SECURITY_PROVIDER = 'macros.superfluid.eth'
-
-/** Nonce key for FlowScheduler macro: uint192 derived from "FlowSchedulerMacro" */
-export function flowSchedulerNonceKey(): bigint {
-  /*
-  const hash = keccak256(toBytes('FlowSchedulerMacro'))
-  const hex = hash.slice(2)
-  const bytes24 = hex.slice(hex.length - 48)
-  return BigInt.asUintN(192, BigInt('0x' + bytes24))
-  */
-  // keep the number human-readable
-  return BigInt(0);
-}
-
-export interface ScheduleFlowParams {
+export interface FlowSchedulerActionParams {
   superToken: Address
   receiver: Address
   startDate: number
@@ -62,16 +50,8 @@ export interface ScheduleFlowParams {
   userData: `0x${string}`
 }
 
-export interface ScheduleFlowSecurity {
-  domain: string
-  provider: string
-  validAfter: bigint
-  validBefore: bigint
-  nonce: bigint
-}
-
-/** Must match FlowScheduler712Macro._ACTION_TYPE_DEFINITION in usermacro-examples */
-const ACTION_TYPE = [
+/** Must match FlowScheduler ClearMacro `Action(...)` type definition. */
+const FLOW_SCHEDULER_ACTION_TYPE = [
   { name: 'description', type: 'string' },
   { name: 'superToken', type: 'address' },
   { name: 'receiver', type: 'address' },
@@ -83,79 +63,16 @@ const ACTION_TYPE = [
   { name: 'userData', type: 'bytes' },
 ] as const
 
-export const EIP712_DOMAIN_NAME = 'ClearMacro'
-export const EIP712_DOMAIN_VERSION = '1'
+const CLEAR_MACRO_SECURITY_TYPE = [
+  { name: 'domain', type: 'string' },
+  { name: 'macroContract', type: 'address' },
+  { name: 'provider', type: 'string' },
+  { name: 'validAfter', type: 'uint256' },
+  { name: 'validBefore', type: 'uint256' },
+  { name: 'nonce', type: 'uint256' },
+] as const
 
-export function buildScheduleFlowTypedData(
-  scheduleParams: ScheduleFlowParams,
-  security: ScheduleFlowSecurity,
-  description: string,
-  chainId: number,
-  verifyingContract: Address
-) {
-  const domain = {
-    name: EIP712_DOMAIN_NAME,
-    version: EIP712_DOMAIN_VERSION,
-    chainId,
-    verifyingContract,
-  }
-  console.log('[FlowScheduler] EIP-712 domain:', domain)
-
-  const actionMessage = {
-    description,
-    superToken: scheduleParams.superToken,
-    receiver: scheduleParams.receiver,
-    startDate: scheduleParams.startDate,
-    startMaxDelay: scheduleParams.startMaxDelay,
-    flowRate: scheduleParams.flowRate,
-    startAmount: scheduleParams.startAmount,
-    endDate: scheduleParams.endDate,
-    userData: scheduleParams.userData,
-  }
-  console.log('[FlowScheduler] EIP-712 message.action:', actionMessage)
-  console.log('[FlowScheduler] EIP-712 message.security:', {
-    domain: security.domain,
-    provider: security.provider,
-    validAfter: security.validAfter,
-    validBefore: security.validBefore,
-    nonce: security.nonce,
-  })
-
-  /** Must match ClearMacroForwarderV1: PrimaryType(Action action, Security security) with nested Security */
-  const message = {
-    action: actionMessage,
-    security: {
-      domain: security.domain,
-      provider: security.provider,
-      validAfter: security.validAfter,
-      validBefore: security.validBefore,
-      nonce: security.nonce,
-    },
-  }
-  const typedData = {
-    domain,
-    types: {
-      ScheduleFlow: [
-        { name: 'action', type: 'Action' },
-        { name: 'security', type: 'Security' },
-      ],
-      Action: ACTION_TYPE,
-      Security: [
-        { name: 'domain', type: 'string' },
-        { name: 'provider', type: 'string' },
-        { name: 'validAfter', type: 'uint256' },
-        { name: 'validBefore', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-      ],
-    },
-    primaryType: 'ScheduleFlow' as const,
-    message,
-  }
-  console.log('[FlowScheduler] full typedData:', typedData)
-  return typedData
-}
-
-const FLOW_SCHEDULER_712_MACRO_ABI = [
+const FLOW_SCHEDULER_CLEAR_MACRO_ABI = [
   {
     type: 'function',
     name: 'encodeCreateFlowScheduleParams',
@@ -180,7 +97,7 @@ const FLOW_SCHEDULER_712_MACRO_ABI = [
     ],
     outputs: [
       { name: 'description', type: 'string', internalType: 'string' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
+      { name: 'actionParams', type: 'bytes', internalType: 'bytes' },
       { name: 'structHash', type: 'bytes32', internalType: 'bytes32' },
     ],
   },
@@ -188,296 +105,153 @@ const FLOW_SCHEDULER_712_MACRO_ABI = [
 
 const LANG_EN = '0x656e000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
 
-export async function getDescriptionAndParamsFromMacro(
-  macroAddress: Address,
-  scheduleParams: ScheduleFlowParams
+function getFlowSchedulerClearMacroAddressFromEnv(chainId: number): Address | null {
+  const addrRegex = /^0x[a-fA-F0-9]{40}$/
+  const metadata = sfMetadata as {
+    getNetworkByChainId?: (chainId: number) => { uppercaseName?: string } | undefined
+    networks?: { chainId: number; uppercaseName?: string }[]
+  }
+  const network = metadata.getNetworkByChainId?.(chainId) ?? metadata.networks?.find((n) => n.chainId === chainId)
+  const env = import.meta.env as Record<string, string | undefined>
+  const tryKey = (key: string) => {
+    const v = env[key] ?? ''
+    return addrRegex.test(v) ? (v as Address) : null
+  }
+  const keysToTry = [
+    `VITE_${chainId}_FLOW_SCHEDULER_CLEAR_MACRO_ADDRESS`,
+    ...(network?.uppercaseName ? [`VITE_${network.uppercaseName}_FLOW_SCHEDULER_CLEAR_MACRO_ADDRESS`] : []),
+  ]
+  for (const key of keysToTry) {
+    const a = tryKey(key)
+    if (a) return a
+  }
+  return null
+}
+
+export async function encodeFlowSchedulerActionParams(
+  flowSchedulerClearMacroAddress: Address,
+  action: FlowSchedulerActionParams
 ): Promise<{ description: string; actionParams: Hex }> {
-  console.log('[FlowScheduler] getDescriptionAndParamsFromMacro macro:', macroAddress)
-  console.log('[FlowScheduler] getDescriptionAndParamsFromMacro scheduleParams:', JSON.stringify(scheduleParams, (_, v) => (typeof v === 'bigint' ? v.toString() : v)))
-  const [description, actionParamsBytes, structHash] = await readContract(config, {
-    address: macroAddress,
-    abi: FLOW_SCHEDULER_712_MACRO_ABI,
+  const [description, actionParamsBytes] = await readContract(config, {
+    address: flowSchedulerClearMacroAddress,
+    abi: FLOW_SCHEDULER_CLEAR_MACRO_ABI,
     functionName: 'encodeCreateFlowScheduleParams',
     args: [
       LANG_EN,
       {
-        superToken: scheduleParams.superToken,
-        receiver: scheduleParams.receiver,
-        startDate: scheduleParams.startDate,
-        startMaxDelay: scheduleParams.startMaxDelay,
-        flowRate: scheduleParams.flowRate,
-        startAmount: scheduleParams.startAmount,
-        endDate: scheduleParams.endDate,
-        userData: scheduleParams.userData,
+        superToken: action.superToken,
+        receiver: action.receiver,
+        startDate: action.startDate,
+        startMaxDelay: action.startMaxDelay,
+        flowRate: action.flowRate,
+        startAmount: action.startAmount,
+        endDate: action.endDate,
+        userData: action.userData,
       },
     ],
   })
-  console.log('[FlowScheduler] macro returned description:', description)
-  const apHex = String(actionParamsBytes)
-  console.log('[FlowScheduler] macro returned actionParams length:', apHex.length, 'hex (first 66 chars):', apHex.slice(0, 66) + (apHex.length > 66 ? '...' : ''))
-  console.log('[FlowScheduler] macro returned action structHash:', structHash)
   return { description, actionParams: actionParamsBytes as Hex }
 }
 
-/** Security struct for ClearMacro payload - must match IClearMacroForwarderV1.Security */
-const SECURITY_ABI_COMPONENTS = [
-  { name: 'domain', type: 'string', internalType: 'string' },
-  { name: 'provider', type: 'string', internalType: 'string' },
-  { name: 'validAfter', type: 'uint256', internalType: 'uint256' },
-  { name: 'validBefore', type: 'uint256', internalType: 'uint256' },
-  { name: 'nonce', type: 'uint256', internalType: 'uint256' },
-] as const
-
-/** ABI for ClearMacroForwarderV1 / ClearMacroForwarderV1WithPermit2 (IClearMacroForwarderV1) */
-const CLEAR_MACRO_FORWARDER_ABI = [
-  {
-    type: 'function',
-    name: 'getNonce',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'sender', type: 'address', internalType: 'address' },
-      { name: 'key', type: 'uint192', internalType: 'uint192' },
-    ],
-    outputs: [{ name: 'nonce', type: 'uint256', internalType: 'uint256' }],
-  },
-  {
-    type: 'function',
-    name: 'encodeParams',
-    stateMutability: 'pure',
-    inputs: [
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
-      {
-        name: 'security',
-        type: 'tuple',
-        internalType: 'struct IClearMacroForwarderV1.Security',
-        components: [...SECURITY_ABI_COMPONENTS],
-      },
-    ],
-    outputs: [{ name: '', type: 'bytes', internalType: 'bytes' }],
-  },
-  {
-    type: 'function',
-    name: 'getStructHash',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
-    ],
-    outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
-  },
-  {
-    type: 'function',
-    name: 'getTypeDefinition',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
-    ],
-    outputs: [{ name: '', type: 'string', internalType: 'string' }],
-  },
-  {
-    type: 'function',
-    name: 'getPermit2WitnessStructHash',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
-    ],
-    outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
-  },
-  {
-    type: 'function',
-    name: 'getPermit2WitnessTypeString',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
-    ],
-    outputs: [{ name: '', type: 'string', internalType: 'string' }],
-  },
-] as const
-
-/** Check if a contract exists at the given address on the chain (via eth_getCode) */
-export async function isContractDeployed(address: Address, chainId: number): Promise<boolean> {
-  const chain = config.chains.find((c) => c.id === chainId)
-  const rpcUrl = chain?.rpcUrls?.default?.http?.[0]
-  if (!rpcUrl) return false
-  const client = createPublicClient({
-    chain: chain!,
-    transport: http(rpcUrl),
-  })
-  const code = await client.getBytecode({ address })
-  return code != null && code.length > 2 // 0x or 0x00 = no contract
+export async function buildFlowSchedulerClearMacroTypedData(
+  action: FlowSchedulerActionParams,
+  security: ClearMacroSecurity,
+  description: string,
+  encodedPayload: Hex,
+  flowSchedulerClearMacroAddress: Address,
+  chainId: number,
+  clearMacroForwarderAddress: Address
+) {
+  const primaryType = await getClearMacroPrimaryTypeName(flowSchedulerClearMacroAddress, encodedPayload)
+  const domain = {
+    name: CLEARMACRO_EIP712_DOMAIN_NAME,
+    version: CLEARMACRO_EIP712_DOMAIN_VERSION,
+    chainId,
+    verifyingContract: clearMacroForwarderAddress,
+  }
+  const actionMessage = {
+    description,
+    superToken: action.superToken,
+    receiver: action.receiver,
+    startDate: action.startDate,
+    startMaxDelay: action.startMaxDelay,
+    flowRate: action.flowRate,
+    startAmount: action.startAmount,
+    endDate: action.endDate,
+    userData: action.userData,
+  }
+  const message = {
+    action: actionMessage,
+    security: {
+      domain: security.domain,
+      macroContract: security.macroContract,
+      provider: security.provider,
+      validAfter: security.validAfter,
+      validBefore: security.validBefore,
+      nonce: security.nonce,
+    },
+  }
+  return {
+    domain,
+    types: {
+      [primaryType]: [
+        { name: 'action', type: 'Action' },
+        { name: 'security', type: 'Security' },
+      ],
+      Action: FLOW_SCHEDULER_ACTION_TYPE,
+      Security: CLEAR_MACRO_SECURITY_TYPE,
+    },
+    primaryType,
+    message,
+  } as const
 }
 
-export async function getNextNonce(
-  forwarderAddress: Address,
+export type FlowSchedulerClearMacroUnsupportedReason =
+  | ClearMacroUnsupportedReason
+  | 'flow_scheduler_clear_macro_not_configured'
+
+export interface FlowSchedulerClearMacroConfig {
+  clearMacroForwarderAddress: Address | null
+  clearMacroForwarderWithPermit2Address: Address | null
+  flowSchedulerClearMacroAddress: Address | null
+  unsupportedReason?: FlowSchedulerClearMacroUnsupportedReason
+}
+
+const NULL_CONFIG: FlowSchedulerClearMacroConfig = {
+  clearMacroForwarderAddress: null,
+  clearMacroForwarderWithPermit2Address: null,
+  flowSchedulerClearMacroAddress: null,
+}
+
+export async function getFlowSchedulerClearMacroConfigAsync(
+  chainId: number
+): Promise<FlowSchedulerClearMacroConfig> {
+  const forwarderConfig = await getClearMacroForwarderConfigAsync(chainId)
+  if (forwarderConfig.unsupportedReason) {
+    return { ...NULL_CONFIG, unsupportedReason: forwarderConfig.unsupportedReason }
+  }
+
+  const flowSchedulerClearMacroAddress = getFlowSchedulerClearMacroAddressFromEnv(chainId)
+  return {
+    ...forwarderConfig,
+    flowSchedulerClearMacroAddress,
+    ...(flowSchedulerClearMacroAddress == null && {
+      unsupportedReason: 'flow_scheduler_clear_macro_not_configured' as const,
+    }),
+  }
+}
+
+export async function getFlowSchedulerNextNonce(
+  clearMacroForwarderAddress: Address,
   sender: Address,
   chainId: number
 ): Promise<bigint> {
-  const key = flowSchedulerNonceKey()
-  const nonce = await readContract(config, {
-    address: forwarderAddress,
-    abi: CLEAR_MACRO_FORWARDER_ABI,
-    functionName: 'getNonce',
-    args: [sender, key],
-    chainId,
-  })
-  return nonce
-}
-
-/**
- * Encode the full payload for runMacro using the forwarder's encodeParams.
- * actionParams come from the macro (e.g. second return value of encodeCreateFlowScheduleParams).
- */
-export async function getRunMacroParams(
-  forwarderAddress: Address,
-  actionParams: Hex,
-  security: ScheduleFlowSecurity
-): Promise<Hex> {
-  console.log('[FlowScheduler] getRunMacroParams forwarder:', forwarderAddress)
-  const payload = await readContract(config, {
-    address: forwarderAddress,
-    abi: CLEAR_MACRO_FORWARDER_ABI,
-    functionName: 'encodeParams',
-    args: [
-      actionParams,
-      {
-        domain: security.domain,
-        provider: security.provider,
-        validAfter: security.validAfter,
-        validBefore: security.validBefore,
-        nonce: security.nonce,
-      },
-    ],
-  })
-  const pHex = String(payload)
-  console.log('[FlowScheduler] encodeParams returned payload length:', pHex.length, 'hex (first 66):', pHex.slice(0, 66) + (pHex.length > 66 ? '...' : ''))
-  return payload as Hex
-}
-
-export type FlowSchedulerUnsupportedReason =
-  | 'forwarder_not_deployed'
-  | 'macro_not_configured'
-  | 'forwarder_not_configured'
-
-export interface FlowSchedulerConfig {
-  forwarderAddress: Address | null
-  permit2ForwarderAddress: Address | null
-  macroAddress: Address | null
-  /** Present when not fully supported, explains why */
-  unsupportedReason?: FlowSchedulerUnsupportedReason
-}
-
-const NULL_CONFIG: FlowSchedulerConfig = {
-  forwarderAddress: null,
-  permit2ForwarderAddress: null,
-  macroAddress: null,
-}
-
-
-/**
- * Async config: checks via RPC if the forwarders are deployed on the chain.
- * Forwarder addresses come from env (deterministic across chains); support is determined by on-chain check.
- * Macro address comes from chain-specific env (VITE_<chainId>_... or VITE_<SF_NAME>_...).
- * ClearMacroForwarderV1WithPermit2 extends ClearMacroForwarderV1, so it can serve both roles.
- */
-export async function getFlowSchedulerConfigAsync(chainId: number): Promise<FlowSchedulerConfig> {
-  const clearMacroAddr = getClearMacroForwarderV1Address()
-  const permit2Addr = getClearMacroForwarderV1WithPermit2Address()
-  if (!clearMacroAddr && !permit2Addr) {
-    return { ...NULL_CONFIG, unsupportedReason: 'forwarder_not_configured' }
-  }
-
-  const usingPermit2Superset = permit2Addr != null
-  const configuredForwarder = permit2Addr ?? clearMacroAddr
-  const forwarderDeployed = configuredForwarder ? await isContractDeployed(configuredForwarder, chainId) : false
-  if (!forwarderDeployed) {
-    return { ...NULL_CONFIG, unsupportedReason: 'forwarder_not_deployed' }
-  }
-
-  const macroAddress = getFlowSchedulerMacroAddressFromEnv(chainId)
-  return {
-    forwarderAddress: configuredForwarder,
-    permit2ForwarderAddress: usingPermit2Superset ? permit2Addr! : null,
-    macroAddress,
-    ...(macroAddress == null && { unsupportedReason: 'macro_not_configured' as const }),
-  }
-}
-
-
-/**
- * Fetches the struct hash for the ClearMacro payload from the forwarder.
- */
-export async function getStructHash(
-  forwarderAddress: Address,
-  macroAddress: Address,
-  params: Hex
-): Promise<Hex> {
-  const structHash = await readContract(config, {
-    address: forwarderAddress,
-    abi: CLEAR_MACRO_FORWARDER_ABI,
-    functionName: 'getStructHash',
-    args: [macroAddress, params],
-  })
-  return structHash as Hex
-}
-
-/**
- * Fetches the Permit2 witness struct hash from the forwarder (ClearMacroForwarderV1WithPermit2).
- * Uses constant "ClearMacro" type name for deterministic ordering.
- */
-export async function getPermit2WitnessStructHash(
-  forwarderAddress: Address,
-  macroAddress: Address,
-  params: Hex
-): Promise<Hex> {
-  console.log('[FlowScheduler] getPermit2WitnessStructHash forwarder:', forwarderAddress, 'macro:', macroAddress)
-  const structHash = await readContract(config, {
-    address: forwarderAddress,
-    abi: CLEAR_MACRO_FORWARDER_ABI,
-    functionName: 'getPermit2WitnessStructHash',
-    args: [macroAddress, params],
-  })
-  console.log('[FlowScheduler] getPermit2WitnessStructHash returned:', structHash)
-  return structHash as Hex
-}
-
-/**
- * Fetches the Permit2 witness type string from the forwarder (ClearMacroForwarderV1WithPermit2).
- * Uses constant "ClearMacro" for deterministic alphabetical ordering.
- */
-export async function getPermit2WitnessTypeString(
-  forwarderAddress: Address,
-  macroAddress: Address,
-  params: Hex
-): Promise<string> {
-  const result = await readContract(config, {
-    address: forwarderAddress,
-    abi: CLEAR_MACRO_FORWARDER_ABI,
-    functionName: 'getPermit2WitnessTypeString',
-    args: [macroAddress, params],
-  })
-  console.log('[FlowScheduler] getPermit2WitnessTypeString length:', result.length, 'preview:', result.slice(0, 120) + '...')
-  return result
-}
-
-/**
- * Fetches the type definition from the forwarder for building the witness type string.
- */
-export async function getTypeDefinition(
-  forwarderAddress: Address,
-  macroAddress: Address,
-  params: Hex
-): Promise<string> {
-  const result = await readContract(config, {
-    address: forwarderAddress,
-    abi: CLEAR_MACRO_FORWARDER_ABI,
-    functionName: 'getTypeDefinition',
-    args: [macroAddress, params],
-  })
-  console.log('[FlowScheduler] getTypeDefinition:', result)
-  return result
+  return getClearMacroNonce(
+    clearMacroForwarderAddress,
+    sender,
+    flowSchedulerClearMacroNonceKey(),
+    chainId
+  )
 }
 
 /** Minimal ABI for fetching underlying token from SuperToken */
@@ -491,7 +265,6 @@ const SUPERTOKEN_UNDERLYING_ABI = [
   },
 ] as const
 
-/** Minimal ABI for ERC20 decimals */
 const ERC20_DECIMALS_ABI = [
   {
     type: 'function',
@@ -520,5 +293,3 @@ export async function getTokenDecimals(tokenAddress: Address): Promise<number> {
   })
   return Number(decimals)
 }
-
-export { SECURITY_DOMAIN, SECURITY_PROVIDER }

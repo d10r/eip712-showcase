@@ -3,17 +3,16 @@ import { useAccount, useChainId, useReadContract } from 'wagmi'
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { config } from '../wagmi'
 import { PermitParameters, TokenMetadata } from '../utils/permit'
-import { useFlowSchedulerConfig } from '../hooks/useFlowSchedulerConfig'
+import { useFlowSchedulerClearMacroConfig } from '../hooks/useFlowSchedulerConfig'
 import { getPermit2Config } from '../utils/permit2Witness'
-import type { FlowSchedulerSignatureResult } from './FlowSchedulerForm'
+import type { FlowSchedulerClearMacroSignatureResult } from './FlowSchedulerForm'
 import sfMetadata from '@superfluid-finance/metadata'
 
-const relayerUrl = (): string | null => {
-  const url = import.meta.env.VITE_RELAYER_URL
+function clearMacroProviderUrl(): string | null {
+  const url = import.meta.env.VITE_CLEARMACRO_PROVIDER_URL
   return typeof url === 'string' && url.trim() !== '' ? url.trim().replace(/\/$/, '') : null
 }
 
-// ClearMacroForwarderV1.runMacro (for FlowScheduler "Execute" via wallet)
 const RUN_MACRO_ABI = [
   {
     type: 'function',
@@ -21,15 +20,14 @@ const RUN_MACRO_ABI = [
     stateMutability: 'payable',
     inputs: [
       { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
+      { name: 'encodedPayload', type: 'bytes', internalType: 'bytes' },
       { name: 'signer', type: 'address', internalType: 'address' },
       { name: 'signature', type: 'bytes', internalType: 'bytes' },
     ],
-    outputs: [{ type: 'bool' }],
+    outputs: [{ name: 'success', type: 'bool', internalType: 'bool' }],
   },
 ] as const
 
-// ClearMacroForwarderV1WithPermit2.runPermit2AndMacro - Permit2 + macro execution
 const RUN_PERMIT2_AND_MACRO_ABI = [
   {
     type: 'function',
@@ -37,9 +35,9 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
     stateMutability: 'payable',
     inputs: [
       {
-        name: 'p',
+        name: 'permit2Context',
         type: 'tuple',
-        internalType: 'struct ClearMacroForwarderV1WithPermit2.Permit2MacroParams',
+        internalType: 'struct IClearMacroPermit2Extension.Permit2Context',
         components: [
           {
             name: 'permit',
@@ -59,15 +57,6 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
               { name: 'deadline', type: 'uint256', internalType: 'uint256' },
             ],
           },
-          {
-            name: 'transferDetails',
-            type: 'tuple',
-            internalType: 'struct IPermit2.SignatureTransferDetails',
-            components: [
-              { name: 'to', type: 'address', internalType: 'address' },
-              { name: 'requestedAmount', type: 'uint256', internalType: 'uint256' },
-            ],
-          },
           { name: 'owner', type: 'address', internalType: 'address' },
           { name: 'witness', type: 'bytes32', internalType: 'bytes32' },
           { name: 'witnessTypeString', type: 'string', internalType: 'string' },
@@ -77,13 +66,12 @@ const RUN_PERMIT2_AND_MACRO_ABI = [
         ],
       },
       { name: 'm', type: 'address', internalType: 'contract IClearMacro' },
-      { name: 'params', type: 'bytes', internalType: 'bytes' },
+      { name: 'encodedPayload', type: 'bytes', internalType: 'bytes' },
     ],
-    outputs: [{ type: 'bool' }],
+    outputs: [{ name: 'success', type: 'bool', internalType: 'bool' }],
   },
 ] as const
 
-// ERC20 ABI for permit, allowance, and approve
 const ERC20_ABI = [
   {
     name: 'permit',
@@ -96,9 +84,9 @@ const ERC20_ABI = [
       { name: 'deadline', type: 'uint256' },
       { name: 'v', type: 'uint8' },
       { name: 'r', type: 'bytes32' },
-      { name: 's', type: 'bytes32' }
+      { name: 's', type: 'bytes32' },
     ],
-    outputs: []
+    outputs: [],
   },
   {
     name: 'allowance',
@@ -106,9 +94,9 @@ const ERC20_ABI = [
     stateMutability: 'view',
     inputs: [
       { name: 'owner', type: 'address' },
-      { name: 'spender', type: 'address' }
+      { name: 'spender', type: 'address' },
     ],
-    outputs: [{ type: 'uint256' }]
+    outputs: [{ type: 'uint256' }],
   },
   {
     name: 'approve',
@@ -116,27 +104,26 @@ const ERC20_ABI = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'spender', type: 'address' },
-      { name: 'amount', type: 'uint256' }
+      { name: 'amount', type: 'uint256' },
     ],
-    outputs: [{ type: 'bool' }]
+    outputs: [{ type: 'bool' }],
   },
   {
     name: 'balanceOf',
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ type: 'uint256' }]
+    outputs: [{ type: 'uint256' }],
   },
   {
     name: 'decimals',
     type: 'function',
     stateMutability: 'view',
     inputs: [],
-    outputs: [{ type: 'uint8' }]
+    outputs: [{ type: 'uint8' }],
   },
 ] as const
 
-// Mintable token (e.g. test tokens)
 const MINT_ABI = [
   {
     name: 'mint',
@@ -144,99 +131,102 @@ const MINT_ABI = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'account', type: 'address' },
-      { name: 'amount', type: 'uint256' }
+      { name: 'amount', type: 'uint256' },
     ],
-    outputs: [{ type: 'bool' }]
+    outputs: [{ type: 'bool' }],
   },
 ] as const
 
 const MAX_UINT256 = 2n ** 256n - 1n
 const MINT_AMOUNT_WHOLE_TOKENS = 1_000_000
 
-// Helper function to split a signature into v, r, s components
 const splitSignature = (signature: string) => {
-  const signatureHex = signature.startsWith('0x') ? signature.slice(2) : signature;
-  
-  // A signature is 65 bytes: r (32 bytes) + s (32 bytes) + v (1 byte)
-  const r = `0x${signatureHex.slice(0, 64)}` as `0x${string}`;
-  const s = `0x${signatureHex.slice(64, 128)}` as `0x${string}`;
-  const v = parseInt(signatureHex.slice(128, 130), 16);
-  
-  return { r, s, v };
-};
+  const signatureHex = signature.startsWith('0x') ? signature.slice(2) : signature
+  const r = `0x${signatureHex.slice(0, 64)}` as `0x${string}`
+  const s = `0x${signatureHex.slice(64, 128)}` as `0x${string}`
+  const v = parseInt(signatureHex.slice(128, 130), 16)
+  return { r, s, v }
+}
 
 interface SignatureDisplayProps {
   signature: string | null
   permitParams?: PermitParameters
   tokenMetadata?: TokenMetadata
-  flowSchedulerResult?: FlowSchedulerSignatureResult
+  flowSchedulerClearMacroResult?: FlowSchedulerClearMacroSignatureResult
 }
 
 const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   signature,
   permitParams,
   tokenMetadata,
-  flowSchedulerResult,
+  flowSchedulerClearMacroResult,
 }) => {
   const { address } = useAccount()
   const chainId = useChainId()
-  const { config: flowSchedulerConfig } = useFlowSchedulerConfig(chainId ?? undefined)
+  const { config: clearMacroConfig } = useFlowSchedulerClearMacroConfig(chainId ?? undefined)
   const [isLoading, setIsLoading] = useState(false)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   if (!signature) return null
 
-  const isFlowScheduler = !!flowSchedulerResult
-  const hasPermit2 = !!(flowSchedulerResult?.permit2)
+  const isFlowSchedulerClearMacro = !!flowSchedulerClearMacroResult
+  const hasPermit2 = !!flowSchedulerClearMacroResult?.permit2Context
   const permit2Config = chainId != null ? getPermit2Config(chainId) : { permit2Address: null }
 
-  const canExecuteFlowScheduler =
-    isFlowScheduler &&
-    !!flowSchedulerResult?.params &&
+  const canExecuteClearMacro =
+    isFlowSchedulerClearMacro &&
+    !!flowSchedulerClearMacroResult?.encodedPayload &&
     !!address &&
-    !!flowSchedulerConfig.forwarderAddress &&
-    !!flowSchedulerConfig.macroAddress &&
+    !!clearMacroConfig.clearMacroForwarderAddress &&
+    !!clearMacroConfig.flowSchedulerClearMacroAddress &&
     chainId != null
 
-  const canExecuteClearMacroOnly = canExecuteFlowScheduler && !hasPermit2
+  const canExecuteRunMacro = canExecuteClearMacro && !hasPermit2
 
-  const permit2Forwarder = flowSchedulerConfig.permit2ForwarderAddress
-  const canExecutePermit2AndMacro =
+  const clearMacroForwarderWithPermit2 = clearMacroConfig.clearMacroForwarderWithPermit2Address
+  const canExecuteRunPermit2AndMacro =
     hasPermit2 &&
-    !!flowSchedulerResult?.permit2 &&
+    !!flowSchedulerClearMacroResult?.permit2Context &&
     !!address &&
     !!permit2Config.permit2Address &&
-    !!permit2Forwarder &&
-    !!flowSchedulerConfig.macroAddress &&
-    !!flowSchedulerResult?.scheduleParams?.superToken &&
+    !!clearMacroForwarderWithPermit2 &&
+    !!clearMacroConfig.flowSchedulerClearMacroAddress &&
+    !!flowSchedulerClearMacroResult?.action?.superToken &&
     chainId != null &&
-    flowSchedulerResult.permit2.spender.toLowerCase() === permit2Forwarder!.toLowerCase()
+    flowSchedulerClearMacroResult.permit2Context.spender.toLowerCase() ===
+      clearMacroForwarderWithPermit2!.toLowerCase()
 
-  const permit2Token = hasPermit2 && flowSchedulerResult?.permit2 ? flowSchedulerResult.permit2.permit.token as `0x${string}` : undefined
+  const permit2Token = hasPermit2
+    ? (flowSchedulerClearMacroResult?.permit2Context?.permit.token as `0x${string}`)
+    : undefined
 
   const { data: underlyingBalance, refetch: refetchUnderlyingBalance } = useReadContract({
-    address: hasPermit2 && flowSchedulerResult?.permit2 && address ? permit2Token : undefined,
+    address: hasPermit2 && flowSchedulerClearMacroResult?.permit2Context && address ? permit2Token : undefined,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: hasPermit2 && address ? [address as `0x${string}`] : undefined,
   })
 
   const { data: tokenDecimals } = useReadContract({
-    address: hasPermit2 && flowSchedulerResult?.permit2 ? permit2Token : undefined,
+    address: hasPermit2 && flowSchedulerClearMacroResult?.permit2Context ? permit2Token : undefined,
     abi: ERC20_ABI,
     functionName: 'decimals',
   })
 
-  const permit2Amount = flowSchedulerResult?.permit2?.permit.amount ?? 0n
+  const permit2Amount = flowSchedulerClearMacroResult?.permit2Context?.permit.amount ?? 0n
   const hasUnderlyingBalance = underlyingBalance != null && underlyingBalance >= permit2Amount
-  const needsUnderlyingBalance = canExecutePermit2AndMacro && !hasUnderlyingBalance && permit2Amount > 0n
-  const mintAmount = tokenDecimals != null ? BigInt(MINT_AMOUNT_WHOLE_TOKENS) * 10n ** BigInt(tokenDecimals) : 10n ** 18n * BigInt(MINT_AMOUNT_WHOLE_TOKENS)
+  const needsUnderlyingBalance = canExecuteRunPermit2AndMacro && !hasUnderlyingBalance && permit2Amount > 0n
+  const mintAmount =
+    tokenDecimals != null
+      ? BigInt(MINT_AMOUNT_WHOLE_TOKENS) * 10n ** BigInt(tokenDecimals)
+      : 10n ** 18n * BigInt(MINT_AMOUNT_WHOLE_TOKENS)
 
   const { data: permit2Allowance, refetch: refetchPermit2Allowance } = useReadContract({
-    address: hasPermit2 && flowSchedulerResult?.permit2 && address && permit2Config.permit2Address
-      ? permit2Token
-      : undefined,
+    address:
+      hasPermit2 && flowSchedulerClearMacroResult?.permit2Context && address && permit2Config.permit2Address
+        ? permit2Token
+        : undefined,
     abi: ERC20_ABI,
     functionName: 'allowance',
     args:
@@ -246,9 +236,9 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   })
 
   const hasPermit2Allowance = permit2Allowance != null && permit2Allowance >= permit2Amount
-  const needsPermit2Approval = canExecutePermit2AndMacro && !hasPermit2Allowance && permit2Amount > 0n
+  const needsPermit2Approval = canExecuteRunPermit2AndMacro && !hasPermit2Allowance && permit2Amount > 0n
 
-  const canExecuteViaRelayer = canExecuteFlowScheduler && relayerUrl() != null
+  const canExecuteViaProvider = canExecuteClearMacro && clearMacroProviderUrl() != null
 
   const executePermit = async () => {
     if (!address || !permitParams || !signature) {
@@ -260,19 +250,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       setIsLoading(true)
       setError(null)
       setTxHash(null)
-
-      // Split the signature into v, r, s components
       const { v, r, s } = splitSignature(signature)
-
-      console.log('Executing permit with params:', {
-        owner: permitParams.owner,
-        spender: permitParams.spender,
-        value: permitParams.value,
-        deadline: permitParams.deadline,
-        v, r, s
-      })
-
-      // Execute the permit transaction using Wagmi's writeContract
       const hash = await writeContract(config, {
         address: permitParams.tokenAddress,
         abi: ERC20_ABI,
@@ -284,17 +262,12 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
           permitParams.deadline,
           v,
           r,
-          s
+          s,
         ],
-        chainId: permitParams.chainId
+        chainId: permitParams.chainId,
       })
-
       setTxHash(hash)
-      
-      // Wait for transaction to be mined
       await waitForTransactionReceipt(config, { hash })
-      console.log('Transaction confirmed:', hash)
-      
     } catch (err) {
       console.error('Transaction error:', err)
       setError(err instanceof Error ? err.message : 'Transaction failed')
@@ -303,21 +276,29 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
     }
   }
 
-  const executeFlowScheduler = async () => {
-    if (!flowSchedulerResult?.params || !address || !flowSchedulerConfig.forwarderAddress || !flowSchedulerConfig.macroAddress || chainId == null) return
+  const executeRunMacro = async () => {
+    if (
+      !flowSchedulerClearMacroResult?.encodedPayload ||
+      !address ||
+      !clearMacroConfig.clearMacroForwarderAddress ||
+      !clearMacroConfig.flowSchedulerClearMacroAddress ||
+      chainId == null
+    )
+      return
     try {
       setIsLoading(true)
       setError(null)
       setTxHash(null)
-      const sig = flowSchedulerResult.signature
-      const signatureHex = sig.startsWith('0x') ? sig : `0x${sig}`
+      const signatureHex = flowSchedulerClearMacroResult.signature.startsWith('0x')
+        ? flowSchedulerClearMacroResult.signature
+        : `0x${flowSchedulerClearMacroResult.signature}`
       const hash = await writeContract(config, {
-        address: flowSchedulerConfig.forwarderAddress,
+        address: clearMacroConfig.clearMacroForwarderAddress,
         abi: RUN_MACRO_ABI,
         functionName: 'runMacro',
         args: [
-          flowSchedulerConfig.macroAddress,
-          flowSchedulerResult.params,
+          clearMacroConfig.flowSchedulerClearMacroAddress,
+          flowSchedulerClearMacroResult.encodedPayload,
           address,
           signatureHex as `0x${string}`,
         ],
@@ -325,7 +306,6 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       })
       setTxHash(hash)
       await waitForTransactionReceipt(config, { hash })
-      console.log('[FlowScheduler] runMacro confirmed:', hash)
     } catch (err) {
       console.error('runMacro error:', err)
       setError(err instanceof Error ? err.message : 'Transaction failed')
@@ -335,19 +315,18 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   }
 
   const mintUnderlying = async () => {
-    if (!flowSchedulerResult?.permit2 || !address || chainId == null) return
+    if (!flowSchedulerClearMacroResult?.permit2Context || !address || chainId == null) return
     try {
       setIsLoading(true)
       setError(null)
       const hash = await writeContract(config, {
-        address: flowSchedulerResult.permit2.permit.token as `0x${string}`,
+        address: flowSchedulerClearMacroResult.permit2Context.permit.token as `0x${string}`,
         abi: MINT_ABI,
         functionName: 'mint',
         args: [address as `0x${string}`, mintAmount],
         chainId,
       })
       await waitForTransactionReceipt(config, { hash })
-      // Brief delay so RPC has propagated the new balance
       await new Promise((r) => setTimeout(r, 1500))
       await refetchUnderlyingBalance()
     } catch (err) {
@@ -359,18 +338,13 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   }
 
   const approvePermit2 = async () => {
-    if (
-      !flowSchedulerResult?.permit2 ||
-      !address ||
-      !permit2Config.permit2Address ||
-      chainId == null
-    )
+    if (!flowSchedulerClearMacroResult?.permit2Context || !address || !permit2Config.permit2Address || chainId == null)
       return
     try {
       setIsLoading(true)
       setError(null)
       const hash = await writeContract(config, {
-        address: flowSchedulerResult.permit2.permit.token as `0x${string}`,
+        address: flowSchedulerClearMacroResult.permit2Context.permit.token as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [permit2Config.permit2Address as `0x${string}`, MAX_UINT256],
@@ -386,107 +360,100 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
     }
   }
 
-  const executePermit2AndMacro = async () => {
+  const executeRunPermit2AndMacro = async () => {
     if (
-      !flowSchedulerResult?.permit2 ||
-      !flowSchedulerResult?.params ||
-      !flowSchedulerResult?.scheduleParams?.superToken ||
+      !flowSchedulerClearMacroResult?.permit2Context ||
+      !flowSchedulerClearMacroResult?.encodedPayload ||
+      !flowSchedulerClearMacroResult?.action?.superToken ||
       !address ||
-      !permit2Config.permit2Address ||
-      !permit2Forwarder ||
-      !flowSchedulerConfig.macroAddress ||
+      !clearMacroForwarderWithPermit2 ||
+      !clearMacroConfig.flowSchedulerClearMacroAddress ||
       chainId == null
     )
       return
-    const { permit, transferDetails, witnessStructHash, witnessTypeString } = flowSchedulerResult.permit2
-    const sig = flowSchedulerResult.signature
-    const signatureHex = (sig.startsWith('0x') ? sig : `0x${sig}`) as `0x${string}`
-    const upgradeSuperToken = flowSchedulerResult.scheduleParams.superToken as `0x${string}`
-    console.log('[SignatureDisplay] executePermit2AndMacro caller (owner):', address)
-    console.log('[SignatureDisplay] executePermit2AndMacro permit2Forwarder (spender):', permit2Forwarder)
-    console.log('[SignatureDisplay] executePermit2AndMacro permit2.spender (from signed message):', flowSchedulerResult.permit2.spender)
-    console.log('[SignatureDisplay] executePermit2AndMacro permit:', { token: permit.token, amount: permit.amount.toString(), nonce: permit.nonce.toString(), deadline: permit.deadline.toString() })
-    console.log('[SignatureDisplay] executePermit2AndMacro transferDetails:', { to: transferDetails.to, requestedAmount: transferDetails.requestedAmount.toString() })
-    console.log('[SignatureDisplay] executePermit2AndMacro upgradeSuperToken:', upgradeSuperToken)
-    console.log('[SignatureDisplay] executePermit2AndMacro witnessStructHash:', witnessStructHash)
-    console.log('[SignatureDisplay] executePermit2AndMacro signature length:', signatureHex.length)
+    const flowSchedulerClearMacroAddress = clearMacroConfig.flowSchedulerClearMacroAddress
+    const { permit, witnessStructHash, witnessTypeString } = flowSchedulerClearMacroResult.permit2Context
+    const signatureHex = (
+      flowSchedulerClearMacroResult.signature.startsWith('0x')
+        ? flowSchedulerClearMacroResult.signature
+        : `0x${flowSchedulerClearMacroResult.signature}`
+    ) as `0x${string}`
+    const upgradeSuperToken = flowSchedulerClearMacroResult.action.superToken as `0x${string}`
     try {
       setIsLoading(true)
       setError(null)
       setTxHash(null)
-      const permit2MacroParams = {
-        permit: {
-          permitted: { token: permit.token, amount: permit.amount },
-          nonce: permit.nonce,
-          deadline: permit.deadline,
-        },
-        transferDetails: { to: transferDetails.to, requestedAmount: transferDetails.requestedAmount },
-        owner: address,
-        witness: witnessStructHash as `0x${string}`,
-        witnessTypeString,
-        signature: signatureHex,
-        spender: flowSchedulerResult.permit2.spender,
-        upgradeSuperToken,
-      }
-      const macroHash = await writeContract(config, {
-        address: permit2Forwarder!,
+      const hash = await writeContract(config, {
+        address: clearMacroForwarderWithPermit2,
         abi: RUN_PERMIT2_AND_MACRO_ABI,
         functionName: 'runPermit2AndMacro',
-        args: [permit2MacroParams, flowSchedulerConfig.macroAddress!, flowSchedulerResult.params],
+        args: [
+          {
+            permit: {
+              permitted: { token: permit.token, amount: permit.amount },
+              nonce: permit.nonce,
+              deadline: permit.deadline,
+            },
+            owner: address,
+            witness: witnessStructHash as `0x${string}`,
+            witnessTypeString,
+            signature: signatureHex,
+            spender: flowSchedulerClearMacroResult.permit2Context.spender,
+            upgradeSuperToken,
+          },
+          flowSchedulerClearMacroAddress,
+          flowSchedulerClearMacroResult.encodedPayload,
+        ],
         chainId,
       })
-      setTxHash(macroHash)
-      await waitForTransactionReceipt(config, { hash: macroHash })
-      console.log('[FlowScheduler] runPermit2AndMacro confirmed:', macroHash)
+      setTxHash(hash)
+      await waitForTransactionReceipt(config, { hash })
     } catch (err) {
-      console.error('Permit2 + macro execution error:', err)
+      console.error('runPermit2AndMacro error:', err)
       setError(err instanceof Error ? err.message : 'Execution failed')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const executeViaRelayer = async () => {
-    if (!flowSchedulerResult?.params || !address || !flowSchedulerConfig.macroAddress) return
-    const baseUrl = relayerUrl()
+  const executeViaClearMacroProvider = async () => {
+    if (
+      !flowSchedulerClearMacroResult?.encodedPayload ||
+      !address ||
+      !clearMacroConfig.flowSchedulerClearMacroAddress ||
+      chainId == null
+    )
+      return
+    const baseUrl = clearMacroProviderUrl()
     if (!baseUrl) return
     try {
       setIsLoading(true)
       setError(null)
       setTxHash(null)
-      const sig = flowSchedulerResult.signature
-      const signatureHex = sig.startsWith('0x') ? sig : `0x${sig}`
-      const payload: Record<string, unknown> = {
-        macro: flowSchedulerConfig.macroAddress,
-        params: flowSchedulerResult.params,
-        signer: address,
-        signature: signatureHex,
-      }
-      if (flowSchedulerResult.permit2 && flowSchedulerResult.scheduleParams?.superToken) {
-        payload.permit2 = {
-          permit: flowSchedulerResult.permit2.permit,
-          transferDetails: flowSchedulerResult.permit2.transferDetails,
-          witnessStructHash: flowSchedulerResult.permit2.witnessStructHash,
-          witnessTypeString: flowSchedulerResult.permit2.witnessTypeString,
-          permit2Address: permit2Config.permit2Address,
-          spender: flowSchedulerResult.permit2.spender,
-          upgradeSuperToken: flowSchedulerResult.scheduleParams.superToken,
-        }
-      }
-      const res = await fetch(`${baseUrl}/relay`, {
+      const signatureHex = flowSchedulerClearMacroResult.signature.startsWith('0x')
+        ? flowSchedulerClearMacroResult.signature
+        : `0x${flowSchedulerClearMacroResult.signature}`
+      const res = await fetch(`${baseUrl}/v1/relay-executions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload, (_, v) => (typeof v === 'bigint' ? v.toString() : v)),
+        body: JSON.stringify({
+          kind: 'clearMacroV1',
+          chainId,
+          macroAddress: clearMacroConfig.flowSchedulerClearMacroAddress,
+          signerAddress: address,
+          payload: flowSchedulerClearMacroResult.encodedPayload,
+          signature: signatureHex,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(data?.error ?? `Relayer error: ${res.status}`)
+        setError(data?.message ?? data?.error ?? `Provider error: ${res.status}`)
         return
       }
       if (data.txHash) setTxHash(data.txHash)
       if (data.status === 'failed' && data.error) setError(data.error)
     } catch (err) {
-      console.error('Relayer request failed:', err)
+      console.error('ClearMacro Provider request failed:', err)
       setError(err instanceof Error ? err.message : 'Request failed')
     } finally {
       setIsLoading(false)
@@ -504,7 +471,7 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
     return `${baseUrl}${txHash}`
   }
 
-  const canExecute = !isFlowScheduler && !!permitParams && !!tokenMetadata
+  const canExecute = !isFlowSchedulerClearMacro && !!permitParams && !!tokenMetadata
 
   return (
     <div className="signature-display">
@@ -524,37 +491,33 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
       {hasPermit2 && (
         <div className="eip5267-indicator">
           <span className="badge">Permit2</span>
-          <span className="hint">Signature over PermitWitnessTransferFrom with ClearMacro witness</span>
+          <span className="hint">PermitWitnessTransferFrom with ClearMacro witness</span>
         </div>
       )}
 
       {canExecute && (
-        <button
-          onClick={executePermit}
-          disabled={isLoading}
-          className="button transaction-button"
-        >
+        <button onClick={executePermit} disabled={isLoading} className="button transaction-button">
           {isLoading ? 'Processing...' : 'Execute Permit'}
         </button>
       )}
 
-      {canExecuteClearMacroOnly && (
+      {canExecuteRunMacro && (
         <>
           <button
-            onClick={executeFlowScheduler}
+            onClick={executeRunMacro}
             disabled={isLoading}
             className="button transaction-button button-small"
             title="Execute runMacro via connected wallet"
           >
-            {isLoading ? 'Processing...' : 'Execute'}
+            {isLoading ? 'Processing...' : 'Execute runMacro'}
           </button>
-          {canExecuteViaRelayer && (
+          {canExecuteViaProvider && (
             <button
-              onClick={executeViaRelayer}
+              onClick={executeViaClearMacroProvider}
               disabled={isLoading}
               className="button transaction-button"
             >
-              {isLoading ? 'Sending...' : 'Execute via relayer'}
+              {isLoading ? 'Sending...' : 'Execute via provider'}
             </button>
           )}
         </>
@@ -582,23 +545,23 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
               {isLoading ? 'Processing...' : 'Approve Permit2'}
             </button>
           )}
-          {canExecutePermit2AndMacro && (
+          {canExecuteRunPermit2AndMacro && (
             <button
-              onClick={executePermit2AndMacro}
+              onClick={executeRunPermit2AndMacro}
               disabled={isLoading || needsUnderlyingBalance || needsPermit2Approval}
               className="button transaction-button button-small"
-              title="Execute runPermit2AndMacro (forwarder pulls, upgrades, runs macro)"
+              title="Execute runPermit2AndMacro"
             >
-              {isLoading ? 'Processing...' : 'Execute'}
+              {isLoading ? 'Processing...' : 'Execute runPermit2AndMacro'}
             </button>
           )}
-          {canExecuteViaRelayer && (
+          {canExecuteViaProvider && (
             <button
-              onClick={executeViaRelayer}
+              onClick={executeViaClearMacroProvider}
               disabled={isLoading}
               className="button transaction-button"
             >
-              {isLoading ? 'Sending...' : 'Execute via relayer'}
+              {isLoading ? 'Sending...' : 'Execute via provider'}
             </button>
           )}
         </>
@@ -620,33 +583,38 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
 
       {error && <div className="error">{error}</div>}
 
-      {!txHash && !isFlowScheduler && (
+      {!txHash && !isFlowSchedulerClearMacro && (
         <div className="signature-info">
-          <p>This signature can be submitted on-chain along with the permit parameters to approve token spending without requiring a separate transaction.</p>
+          <p>
+            This signature can be submitted on-chain along with the permit parameters to approve token spending
+            without requiring a separate transaction.
+          </p>
         </div>
       )}
 
-      {isFlowScheduler && (
+      {isFlowSchedulerClearMacro && (
         <div className="signature-info">
           {hasPermit2 ? (
             <>
-              <p>This Permit2 + ScheduleFlow signature authorizes a token transfer and the flow schedule. Execute calls runPermit2AndMacro (forwarder pulls via Permit2, upgrades, and runs the macro). Ensure you have enough underlying balance; use Mint if the token supports it (e.g. test tokens). You must also approve Permit2 to spend your tokens before Execute.</p>
+              <p>
+                This Permit2 signature authorizes a token transfer and the ClearMacro flow schedule. Execute calls
+                runPermit2AndMacro on ClearMacroForwarderV1WithPermit2.
+              </p>
               {needsUnderlyingBalance && (
-                <p className="info-message">
-                  Mint underlying tokens before Execute (insufficient balance).
-                </p>
+                <p className="info-message">Mint underlying tokens before Execute (insufficient balance).</p>
               )}
               {needsPermit2Approval && !needsUnderlyingBalance && (
-                <p className="info-message">
-                  Approve Permit2 to spend your tokens before Execute.
-                </p>
+                <p className="info-message">Approve Permit2 to spend your tokens before Execute.</p>
               )}
             </>
           ) : (
-            <p>This ScheduleFlow signature can be used with the forwarder&apos;s runMacro to create the flow schedule on-chain.</p>
+            <p>
+              This ClearMacro signature can be used with runMacro on ClearMacroForwarderV1 to create the flow schedule
+              on-chain.
+            </p>
           )}
-          {!relayerUrl() && (
-            <p className="info-message">Set VITE_RELAYER_URL to enable &quot;Execute via relayer&quot;.</p>
+          {!clearMacroProviderUrl() && (
+            <p className="info-message">Set VITE_CLEARMACRO_PROVIDER_URL to enable Execute via provider.</p>
           )}
         </div>
       )}
@@ -654,4 +622,4 @@ const SignatureDisplay: React.FC<SignatureDisplayProps> = ({
   )
 }
 
-export default SignatureDisplay 
+export default SignatureDisplay
